@@ -29,6 +29,7 @@ RECEIVED → ANALYZING → DIAGNOSED → ACTION_SELECTED → POLICY_CHECK
 - Prisma schema
 - Webhook handler (signature + idempotency)
 - Rule-based agents (LLM comes Day 3)
++ **Gemini Flash agents** (diagnosis + strategy) with rule fallback
 - Policy engine
 - Recovery workflow state machine
 - **Real Razorpay Test Mode execution** (`PAYMENT_LINK` / retry / method update → payment link)

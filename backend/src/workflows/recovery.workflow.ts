@@ -144,6 +144,8 @@ export async function startRecoveryWorkflow(params: {
   const diagnosis = await diagnoseFailure({
     failureReason,
     method: paymentEntity?.method,
+    previousAttempts: 0,
+    amountInr: amount / 100,
   });
 
   await prisma.recoveryCase.update({
@@ -158,10 +160,10 @@ export async function startRecoveryWorkflow(params: {
   await prisma.aIDecision.create({
     data: {
       recoveryCaseId: recoveryCase.id,
-      agent: "diagnosis",
+      agent: diagnosis.source === "gemini" ? "diagnosis_gemini" : "diagnosis_rules",
       diagnosis: diagnosis.diagnosis,
       confidence: diagnosis.confidence,
-      reason: diagnosis.failureCategory,
+      reason: diagnosis.reason ?? diagnosis.failureCategory,
       rawJson: diagnosis,
     },
   });
@@ -182,6 +184,7 @@ export async function startRecoveryWorkflow(params: {
     amount: amount / 100,
     previousAttempts: attemptCount,
     successfulPayments: 0,
+    failureCategory: diagnosis.failureCategory,
   });
 
   await prisma.recoveryCase.update({
@@ -196,7 +199,7 @@ export async function startRecoveryWorkflow(params: {
   await prisma.aIDecision.create({
     data: {
       recoveryCaseId: recoveryCase.id,
-      agent: "strategy",
+      agent: strategy.source === "gemini" ? "strategy_gemini" : "strategy_rules",
       recommendedAction: strategy.recommendedAction,
       reason: strategy.reason,
       confidence: strategy.expectedRecoveryProbability,

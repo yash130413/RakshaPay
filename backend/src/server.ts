@@ -4,6 +4,7 @@ import express from "express";
 import { webhookRouter } from "./razorpay/webhook.handler.js";
 import { analyticsRouter } from "./analytics/analytics.router.js";
 import { recoveryRouter } from "./recovery/recovery.router.js";
+import { isLlmConfigured } from "./agents/index.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
@@ -28,6 +29,11 @@ app.get("/health", (_req, res) => {
     ok: true,
     service: "razorrecover-backend",
     principle: "AI decides. Policy controls. Razorpay executes. Webhooks verify.",
+    llm: {
+      provider: "gemini",
+      model: process.env.LLM_MODEL ?? "gemini-3.6-flash",
+      configured: isLlmConfigured(),
+    },
   });
 });
 
