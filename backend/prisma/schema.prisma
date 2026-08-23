@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RecoveryCaseStatus {
+  RECEIVED
+  ANALYZING
+  DIAGNOSED
+  ACTION_SELECTED
+  POLICY_CHECK
+  APPROVED
+  REJECTED
+  EXECUTING
+  WAITING_FOR_WEBHOOK
+  RECOVERED
+  FAILED
+  ESCALATED
+}
+
+enum RecoveryActionType {
+  RETRY_PAYMENT
+  PAYMENT_LINK
+  METHOD_UPDATE
+  WAIT
+  HUMAN_ESCALATION
+  STOP
+}
+
+enum PolicyDecision {
+  APPROVED
+  REJECTED
+  ESCALATE
+}
+
+model Merchant {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customers     Customer[]
+  payments      Payment[]
+  recoveryCases RecoveryCase[]
+  policies      Policy[]
+}
+
+model Customer {
+  id               String   @id @default(cuid())
+  merchantId       String
+  razorpayCustomerId String?
+  name             String?
+  email            String?
+  phone            String?
+  successfulPayments Int    @default(0)
+  avgAmount        Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  merchant      Merchant       @relation(fields: [merchantId], references: [id])
+  payments      Payment[]
+  recoveryCases RecoveryCase[]
+
+  @@index([merchantId])
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  merchantId      String
+  customerId      String?
+  razorpayPaymentId String? @unique
+  amount          Int
+  currency        String   @default("INR")
+  status          String
+  method          String?
+  failureReason   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  merchant      Merchant       @relation(fields: [merchantId], references: [id])
+  customer      Customer?      @relation(fields: [customerId], references: [id])
+  recoveryCases RecoveryCase[]
+
+  @@index([merchantId])
+  @@index([status])
+}
+
+model RecoveryCase {
+  id              String             @id @default(cuid())
+  merchantId      String
+  customerId      String?
+  paymentId       String?
+  amount          Int
+  currency        String             @default("INR")
+  status          RecoveryCaseStatus @default(RECEIVED)
+  failureReason   String?
+  diagnosis       String?
+  diagnosisConfidence Float?
+  recommendedAction RecoveryActionType?
+  expectedRecoveryProbability Float?
+  recoveredAmount Int                @default(0)
+  attemptCount    Int                @default(0)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  merchant  Merchant         @relation(fields: [merchantId], references: [id])
+  customer  Customer?        @relation(fields: [customerId], references: [id])
+  payment   Payment?         @relation(fields: [paymentId], references: [id])
+  decisions AIDecision[]
+  actions   RecoveryAction[]
+  results   RecoveryResult[]
+  audits    AuditLog[]
+
+  @@index([merchantId])
+  @@index([status])
+}
+
+model AIDecision {
+  id            String             @id @default(cuid())
+  recoveryCaseId String
+  agent         String
+  diagnosis     String?
+  confidence    Float?
+  recommendedAction RecoveryActionType?
+  reason        String?
+  rawJson       Json?
+  createdAt     DateTime           @default(now())
+
+  recoveryCase RecoveryCase @relation(fields: [recoveryCaseId], references: [id])
+
+  @@index([recoveryCaseId])
+}
+
+model RecoveryAction {
+  id              String             @id @default(cuid())
+  recoveryCaseId  String
+  actionType      RecoveryActionType
+  policyDecision  PolicyDecision
+  razorpayRefId   String?
+  status          String             @default("pending")
+  metadata        Json?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  recoveryCase RecoveryCase @relation(fields: [recoveryCaseId], references: [id])
+
+  @@index([recoveryCaseId])
+}
+
+model RecoveryResult {
+  id              String   @id @default(cuid())
+  recoveryCaseId  String
+  success         Boolean
+  recoveredAmount Int      @default(0)
+  verifiedAt      DateTime @default(now())
+  sourceEventId   String?
+  notes           String?
+
+  recoveryCase RecoveryCase @relation(fields: [recoveryCaseId], references: [id])
+
+  @@index([recoveryCaseId])
+}
+
+model WebhookEvent {
+  id            String   @id @default(cuid())
+  eventId       String?  @unique
+  eventType     String
+  payload       Json
+  processed     Boolean  @default(false)
+  processingError String?
+  receivedAt    DateTime @default(now())
+  processedAt   DateTime?
+
+  @@index([eventType])
+  @@index([processed])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  recoveryCaseId String?
+  eventType      String
+  message        String
+  metadata       Json?
+  createdAt      DateTime @default(now())
+
+  recoveryCase RecoveryCase? @relation(fields: [recoveryCaseId], references: [id])
+
+  @@index([recoveryCaseId])
+  @@index([createdAt])
+}
+
+model Policy {
+  id                 String   @id @default(cuid())
+  merchantId         String
+  name               String   @default("default")
+  maxRetries         Int      @default(2)
+  maxRecoveryAmount  Int      @default(50000)
+  allowPaymentLink   Boolean  @default(true)
+  requireHumanAbove  Int      @default(25000)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id])
+
+  @@index([merchantId])
+}
