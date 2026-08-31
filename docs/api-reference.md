@@ -95,9 +95,17 @@ Invoke-RestMethod -Uri "http://localhost:4000/webhooks/razorpay" `
 
 ### `GET /api/analytics/summary`
 
-Dashboard KPIs.
+Dashboard KPIs including escalated / rejected counts.
 
-**Response**
+### `GET /api/analytics/series`
+
+Daily cumulative failed inflow vs recovered (INR) for the recovery chart.
+
+### `GET /api/analytics/evaluation`
+
+Held-out evaluation snapshot (baseline vs RazorRecover highlights).
+
+**Summary response example**
 
 ```json
 {

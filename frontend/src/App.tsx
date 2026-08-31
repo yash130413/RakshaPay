@@ -1,4 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import "./App.css";
 
 type Summary = {
@@ -51,6 +61,20 @@ type RecoveryCase = {
   audits?: AuditLog[];
 };
 
+type SeriesPoint = {
+  date: string;
+  failedInr: number;
+  recoveredInr: number;
+  cumulativeFailedInr: number;
+  cumulativeRecoveredInr: number;
+};
+
+type EvalSnapshot = {
+  n: number;
+  split: string;
+  highlights: { label: string; baseline: string; agent: string; delta: string }[];
+};
+
 type StatusFilter = "ALL" | "WAITING_FOR_WEBHOOK" | "RECOVERED" | "ESCALATED" | "REJECTED";
 
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
@@ -71,6 +95,11 @@ function formatTime(iso: string) {
   });
 }
 
+function shortDate(isoDate: string) {
+  const d = new Date(isoDate + "T00:00:00");
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
 function agentSource(decisions?: Decision[]) {
   const src = decisions?.map((d) => d.rawJson?.source ?? d.agent).filter(Boolean);
   if (!src?.length) return null;
@@ -79,10 +108,21 @@ function agentSource(decisions?: Decision[]) {
   return null;
 }
 
+function EmptyState({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="empty">
+      <p className="empty-title">{title}</p>
+      <p className="muted">{body}</p>
+    </div>
+  );
+}
+
 export default function App() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [cases, setCases] = useState<RecoveryCase[]>([]);
   const [audits, setAudits] = useState<AuditLog[]>([]);
+  const [series, setSeries] = useState<SeriesPoint[]>([]);
+  const [evaluation, setEvaluation] = useState<EvalSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>("ALL");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -94,11 +134,15 @@ export default function App() {
       fetch(`${API}/api/analytics/summary`).then((r) => r.json()),
       fetch(`${API}/api/recovery/cases`).then((r) => r.json()),
       fetch(`${API}/api/recovery/audit`).then((r) => r.json()),
+      fetch(`${API}/api/analytics/series`).then((r) => r.json()),
+      fetch(`${API}/api/analytics/evaluation`).then((r) => r.json()),
     ])
-      .then(([s, c, a]) => {
+      .then(([s, c, a, ser, ev]) => {
         setSummary(s);
         setCases(Array.isArray(c) ? c : []);
         setAudits(Array.isArray(a) ? a : []);
+        setSeries(Array.isArray(ser?.series) ? ser.series : []);
+        setEvaluation(ev?.highlights ? ev : null);
         setError(null);
       })
       .catch(() => setError("Backend offline — start backend on :4000"));
@@ -118,6 +162,15 @@ export default function App() {
   const selected = useMemo(
     () => cases.find((c) => c.id === selectedId) ?? null,
     [cases, selectedId]
+  );
+
+  const chartData = useMemo(
+    () =>
+      series.map((p) => ({
+        ...p,
+        label: shortDate(p.date),
+      })),
+    [series]
   );
 
   async function triggerDemo(scenario: "recoverable" | "escalate" | "reject") {
@@ -161,13 +214,16 @@ export default function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>RazorRecover</h1>
-        <span className="live">● LIVE</span>
+        <div>
+          <div className="header-row">
+            <h1>RazorRecover</h1>
+            <span className="live">● LIVE</span>
+          </div>
+          <p className="tagline">
+            AI decides. Policy controls. Razorpay executes. Webhooks verify.
+          </p>
+        </div>
       </header>
-
-      <p className="tagline">
-        AI decides. Policy controls. Razorpay executes. Webhooks verify.
-      </p>
 
       {error && <p className="error">{error}</p>}
       {toast && <p className="toast">{toast}</p>}
@@ -175,11 +231,7 @@ export default function App() {
       <section className="demo-bar">
         <p className="demo-label">Demo scenarios (policy paths)</p>
         <div className="demo-actions">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => triggerDemo("recoverable")}
-          >
+          <button type="button" disabled={busy} onClick={() => triggerDemo("recoverable")}>
             Recoverable ₹2,499
           </button>
           <button
@@ -208,15 +260,11 @@ export default function App() {
         </div>
         <div>
           <p className="label">Recovered</p>
-          <p className="value recovered">
-            {formatInr(summary?.recovered ?? 0)}
-          </p>
+          <p className="value recovered">{formatInr(summary?.recovered ?? 0)}</p>
         </div>
         <div>
           <p className="label">Recovery Rate</p>
-          <p className="value">
-            {((summary?.recoveryRate ?? 0) * 100).toFixed(1)}%
-          </p>
+          <p className="value">{((summary?.recoveryRate ?? 0) * 100).toFixed(1)}%</p>
         </div>
         <div>
           <p className="label">Cases</p>
@@ -245,10 +293,113 @@ export default function App() {
         </div>
       </section>
 
+      <section className="panel eval-strip">
+        <div className="panel-head">
+          <h2>Held-out evaluation</h2>
+          <span className="pill">
+            {evaluation ? `${evaluation.split} · n=${evaluation.n}` : "loading…"}
+          </span>
+        </div>
+        {!evaluation ? (
+          <EmptyState
+            title="Evaluation snapshot unavailable"
+            body="Start the backend to load baseline vs RazorRecover metrics."
+          />
+        ) : (
+          <>
+            <p className="muted small">
+              Offline experiment: blind retry baseline vs RazorRecover (rules + policy).
+            </p>
+            <div className="eval-grid">
+              {evaluation.highlights.map((h) => (
+                <div key={h.label} className="eval-card">
+                  <p className="label">{h.label}</p>
+                  <div className="eval-row">
+                    <span>
+                      <em>Baseline</em> {h.baseline}
+                    </span>
+                    <span className="agent">
+                      <em>RazorRecover</em> {h.agent}
+                    </span>
+                  </div>
+                  <p className="delta">{h.delta}</p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="panel chart-panel">
+        <div className="panel-head">
+          <h2>Revenue recovery</h2>
+          <span className="pill">cumulative INR</span>
+        </div>
+        {chartData.length === 0 ? (
+          <EmptyState
+            title="No recovery data yet"
+            body="Run a demo scenario or send a payment.failed webhook — the chart fills as cases arrive."
+          />
+        ) : (
+          <div className="chart-wrap">
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="failedFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#94a3b8" stopOpacity={0.02} />
+                  </linearGradient>
+                  <linearGradient id="recoveredFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#059669" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#059669" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#64748b" }} />
+                <YAxis
+                  tick={{ fontSize: 12, fill: "#64748b" }}
+                  tickFormatter={(v) =>
+                    v >= 100000 ? `${(v / 100000).toFixed(1)}L` : `${Math.round(v / 1000)}k`
+                  }
+                />
+                <Tooltip
+                  formatter={(value) => formatInr(Number(value ?? 0))}
+                  contentStyle={{
+                    borderRadius: 8,
+                    border: "1px solid #e2e8f0",
+                    fontSize: 12,
+                  }}
+                />
+                <Legend />
+                <Area
+                  type="monotone"
+                  dataKey="cumulativeFailedInr"
+                  name="Failed (at risk inflow)"
+                  stroke="#64748b"
+                  fill="url(#failedFill)"
+                  strokeWidth={2}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="cumulativeRecoveredInr"
+                  name="Recovered"
+                  stroke="#059669"
+                  fill="url(#recoveredFill)"
+                  strokeWidth={2}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
+
       <section className="panel">
         <h2>AI Actions</h2>
         {(summary?.actions?.length ?? 0) === 0 ? (
-          <p className="muted">No actions yet — run a demo scenario above.</p>
+          <EmptyState
+            title="No AI actions yet"
+            body="Trigger Recoverable / Escalate / Reject above to see recommended actions."
+          />
         ) : (
           <ul className="action-chips">
             {summary!.actions.map((a) => (
@@ -286,8 +437,16 @@ export default function App() {
             </div>
           </div>
 
-          {filteredCases.length === 0 ? (
-            <p className="muted">No cases for this filter.</p>
+          {cases.length === 0 ? (
+            <EmptyState
+              title="No recovery cases"
+              body="Your merchant ledger is empty. Run a demo scenario to create the first case."
+            />
+          ) : filteredCases.length === 0 ? (
+            <EmptyState
+              title={`No ${filter === "ALL" ? "" : filter.toLowerCase()} cases`}
+              body="Try another filter, or run Escalate / Reject demos to populate those states."
+            />
           ) : (
             <ul className="case-list">
               {filteredCases.slice(0, 20).map((c) => {
@@ -303,25 +462,19 @@ export default function App() {
                 return (
                   <li
                     key={c.id}
-                    className={
-                      selectedId === c.id ? "case-item selected" : "case-item"
-                    }
+                    className={selectedId === c.id ? "case-item selected" : "case-item"}
                     onClick={() => setSelectedId(c.id)}
                   >
                     <div className="case-top">
                       <strong>{formatInr(c.amount / 100)}</strong>
-                      <span className={`badge status-${c.status}`}>
-                        {c.status}
-                      </span>
+                      <span className={`badge status-${c.status}`}>{c.status}</span>
                     </div>
                     <p className="case-meta">
                       {c.diagnosis ?? "—"} → {c.recommendedAction ?? "—"}
                       {c.failureReason ? ` (${c.failureReason})` : ""}
                     </p>
                     <div className="case-tags">
-                      {source && (
-                        <span className={`tag source-${source}`}>{source}</span>
-                      )}
+                      {source && <span className={`tag source-${source}`}>{source}</span>}
                       {c.status === "ESCALATED" && (
                         <span className="tag escalate-tag">needs human</span>
                       )}
@@ -354,14 +507,15 @@ export default function App() {
         <section className="panel detail">
           <h2>Case Detail</h2>
           {!selected ? (
-            <p className="muted">Select a case to inspect AI decisions, policy, and audit.</p>
+            <EmptyState
+              title="No case selected"
+              body="Click a recovery case to inspect Gemini/rules decisions, policy outcome, and the case audit trail."
+            />
           ) : (
             <div className="detail-body">
               <div className="case-top">
                 <strong>{formatInr(selected.amount / 100)}</strong>
-                <span className={`badge status-${selected.status}`}>
-                  {selected.status}
-                </span>
+                <span className={`badge status-${selected.status}`}>{selected.status}</span>
               </div>
               <p className="case-meta">
                 {selected.failureReason ?? "no failure reason"} · created{" "}
@@ -396,15 +550,19 @@ export default function App() {
               )}
 
               <h3>Case audit</h3>
-              <ol className="timeline">
-                {(selected.audits ?? []).map((a) => (
-                  <li key={a.id}>
-                    <span className="time">{formatTime(a.createdAt)}</span>
-                    <span className="evt">{a.eventType}</span>
-                    <span className="msg">{a.message}</span>
-                  </li>
-                ))}
-              </ol>
+              {(selected.audits?.length ?? 0) === 0 ? (
+                <p className="muted">No audit events for this case.</p>
+              ) : (
+                <ol className="timeline">
+                  {selected.audits!.map((a) => (
+                    <li key={a.id}>
+                      <span className="time">{formatTime(a.createdAt)}</span>
+                      <span className="evt">{a.eventType}</span>
+                      <span className="msg">{a.message}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
 
               {selected.status === "WAITING_FOR_WEBHOOK" && (
                 <button
@@ -422,21 +580,25 @@ export default function App() {
       </div>
 
       <section className="panel audit-panel">
-        <h2>Audit Trail</h2>
+        <div className="panel-head">
+          <h2>Audit Trail</h2>
+          <span className="pill">{audits.length} events</span>
+        </div>
         <p className="muted small">
-          Immutable event log — every detect → diagnose → policy → execute → verify step.
+          Immutable log — detect → diagnose → policy → execute → verify.
         </p>
         {audits.length === 0 ? (
-          <p className="muted">No audit events yet.</p>
+          <EmptyState
+            title="Audit trail is empty"
+            body="Every webhook and policy decision will appear here once the first case runs."
+          />
         ) : (
           <ol className="timeline global">
             {audits.slice(0, 40).map((a) => (
               <li
                 key={a.id}
                 className={
-                  a.recoveryCaseId && a.recoveryCaseId === selectedId
-                    ? "highlight"
-                    : undefined
+                  a.recoveryCaseId && a.recoveryCaseId === selectedId ? "highlight" : undefined
                 }
               >
                 <span className="time">{formatTime(a.createdAt)}</span>

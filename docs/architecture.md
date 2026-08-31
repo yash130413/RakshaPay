@@ -306,7 +306,8 @@ On `payment.captured`:
 |--------|------|---------|
 | `GET` | `/health` | Liveness + LLM configured flag |
 | `POST` | `/webhooks/razorpay` | Razorpay webhooks (raw body) |
-| `GET` | `/api/analytics/summary` | At risk / recovered / rate / escalated / rejected counts |
+| `GET` | `/api/analytics/series` | Daily cumulative failed vs recovered chart data |
+| `GET` | `/api/analytics/evaluation` | Held-out baseline vs RazorRecover snapshot |
 | `GET` | `/api/recovery/cases` | Recent cases + actions + decisions + audits |
 | `GET` | `/api/recovery/cases/:id` | Full case detail |
 | `POST` | `/api/recovery/demo/trigger` | Demo scenarios: recoverable / escalate / reject |
@@ -365,7 +366,7 @@ Never commit real secrets. Use `.env` locally; `.env.example` as template.
 | Day 2 | Done | Real Razorpay execute, capture → RECOVERED, dashboard cases |
 | Day 3 | Done | Gemini diagnosis + strategy + 30s timeout + rules fallback |
 | Day 4–5 | Done | Audit Trail UI, case detail, demo escalate/reject triggers |
-| Day 6 | Planned | Dashboard polish / audit UI |
+| Day 6 | Done | Chart (Recharts), eval metrics strip, empty states, layout polish |
 | Day 7 | Done | Offline eval: baseline vs RazorRecover on holdout synthetic set |
 | Day 8–9 | Planned | Deploy + README + 5-min pitch |
 

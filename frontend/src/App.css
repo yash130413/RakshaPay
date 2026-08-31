@@ -11,12 +11,12 @@ body {
 }
 
 .app {
-  max-width: 1100px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 2rem 1.25rem 3rem;
+  padding: 2rem 1.25rem 3.5rem;
 }
 
-.header {
+.header-row {
   display: flex;
   align-items: baseline;
   gap: 1rem;
@@ -28,15 +28,96 @@ body {
   letter-spacing: -0.03em;
 }
 
+.tagline {
+  color: #475569;
+  margin: 0.35rem 0 0;
+}
+
+.pill {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.empty {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.empty-title {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.eval-strip {
+  margin-top: 1rem;
+}
+
+.eval-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.eval-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+}
+
+.eval-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  margin-top: 0.35rem;
+  color: #334155;
+}
+
+.eval-row em {
+  font-style: normal;
+  color: #94a3b8;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  margin-right: 0.35rem;
+}
+
+.eval-row .agent {
+  color: #065f46;
+  font-weight: 600;
+}
+
+.delta {
+  margin: 0.45rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #059669;
+}
+
+.chart-panel {
+  margin-top: 1rem;
+}
+
+.chart-wrap {
+  width: 100%;
+  min-height: 260px;
+}
+
 .live {
   color: #059669;
   font-size: 0.85rem;
   font-weight: 600;
-}
-
-.tagline {
-  color: #475569;
-  margin-top: 0.35rem;
 }
 
 .demo-bar {
@@ -436,6 +517,10 @@ button.filter.active {
 @media (max-width: 900px) {
   .grid-2 {
     grid-template-columns: 1fr;
+  }
+
+  .eval-grid {
+    grid-template-columns: 1fr 1fr;
   }
 
   .timeline li {
