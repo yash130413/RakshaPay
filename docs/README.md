@@ -8,7 +8,7 @@ Professional documentation set for the Razorpay AI internship submission.
 | [architecture.md](./architecture.md) | Full system design, stack, agents, policy, data model |
 | [api-reference.md](./api-reference.md) | HTTP endpoints, payloads, webhook testing |
 | [setup-and-testing.md](./setup-and-testing.md) | Local setup, Neon, Gemini, Razorpay, test playbook |
-| [demo-script.md](./demo-script.md) | 5-minute judge / interviewer demo |
+| [evaluation.md](./evaluation.md) | Baseline vs RazorRecover metrics |
 
 ## Core principle
 

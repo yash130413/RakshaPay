@@ -366,7 +366,7 @@ Never commit real secrets. Use `.env` locally; `.env.example` as template.
 | Day 3 | Done | Gemini diagnosis + strategy + 30s timeout + rules fallback |
 | Day 4–5 | Done | Audit Trail UI, case detail, demo escalate/reject triggers |
 | Day 6 | Planned | Dashboard polish / audit UI |
-| Day 7 | Planned | Evaluation dataset + metrics |
+| Day 7 | Done | Offline eval: baseline vs RazorRecover on holdout synthetic set |
 | Day 8–9 | Planned | Deploy + README + 5-min pitch |
 
 ---

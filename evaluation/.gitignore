@@ -1,0 +1,9 @@
+# Evaluation outputs (generated)
+results/
+!results/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

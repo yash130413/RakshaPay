@@ -1,0 +1,7 @@
+{
+  "n": 3000,
+  "seed": 42,
+  "holdout": 885,
+  "train": 2115,
+  "path": "C:\\Users\\yashr\\Desktop\\razorrecover\\evaluation\\dataset\\synthetic_failures.csv"
+}

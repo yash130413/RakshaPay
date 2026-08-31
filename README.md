@@ -88,7 +88,19 @@ Full instructions: [docs/setup-and-testing.md](./docs/setup-and-testing.md).
 | Razorpay Test payment link execution | Done |
 | `payment.captured` → RECOVERED | Done |
 | Merchant dashboard (metrics + cases) | Done |
-| Evaluation harness / deploy polish | In progress |
+| Evaluation harness / deploy polish | Eval done · deploy next |
+
+## Evaluation snapshot (holdout, n=885)
+
+| Metric | Baseline | RazorRecover |
+|--------|----------|--------------|
+| Recovery rate | 49.3% | **68.6%** |
+| Revenue recovered | Rs 37.7L | **Rs 45.0L** |
+| Total retries | 2026 | **222** |
+| Unnecessary retries | 1009 | **0** |
+
+Full report: [evaluation/results/comparison.md](./evaluation/results/comparison.md)  
+How to reproduce: [evaluation/README.md](./evaluation/README.md)
 
 ## Safety model
 
