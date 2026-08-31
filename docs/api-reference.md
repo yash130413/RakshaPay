@@ -155,6 +155,16 @@ Full case: `decisions`, `actions`, `results`, full `audits`.
 ]
 ```
 
+| `POST` | `/api/recovery/demo/trigger` | Demo policy paths without Razorpay signature |
+
+Body: `{ "scenario": "recoverable" | "escalate" | "reject" }`
+
+| Scenario | Amount | Expected status |
+|----------|--------|-----------------|
+| `recoverable` | ₹2,499 | `WAITING_FOR_WEBHOOK` (after approve + execute) |
+| `escalate` | ₹30,000 | `ESCALATED` (human threshold) |
+| `reject` | ₹60,000 | `REJECTED` (above max recovery) |
+
 ### `POST /api/recovery/cases/:id/execute`
 
 Re-executes Razorpay recovery for a case (useful for Day-1 `queued` rows or retries).

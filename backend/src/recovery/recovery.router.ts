@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../db.js";
 import { writeAudit } from "../audit/audit.service.js";
 import { executeRecoveryAction } from "./recovery.executor.js";
+import { startRecoveryWorkflow } from "../workflows/recovery.workflow.js";
 
 export const recoveryRouter = Router();
 
@@ -11,7 +12,8 @@ recoveryRouter.get("/cases", async (_req, res) => {
     take: 50,
     include: {
       actions: true,
-      audits: { orderBy: { createdAt: "asc" }, take: 20 },
+      decisions: { orderBy: { createdAt: "asc" } },
+      audits: { orderBy: { createdAt: "asc" }, take: 30 },
     },
   });
   res.json(cases);
@@ -21,7 +23,7 @@ recoveryRouter.get("/cases/:id", async (req, res) => {
   const recoveryCase = await prisma.recoveryCase.findUnique({
     where: { id: req.params.id },
     include: {
-      decisions: true,
+      decisions: { orderBy: { createdAt: "asc" } },
       actions: true,
       results: true,
       audits: { orderBy: { createdAt: "asc" } },
@@ -33,6 +35,101 @@ recoveryRouter.get("/cases/:id", async (req, res) => {
   }
 
   return res.json(recoveryCase);
+});
+
+/**
+ * Demo triggers — bypass Razorpay signature so judges can see policy paths live.
+ * Scenarios:
+ *  - recoverable: ~₹2,499 → AI decide → policy approve → payment link
+ *  - escalate:    ~₹30,000 → policy ESCALATE (human review threshold)
+ *  - reject:      ~₹60,000 → policy REJECT (above max recovery amount)
+ */
+recoveryRouter.post("/demo/trigger", async (req, res) => {
+  const scenario = (req.body?.scenario as string) ?? "recoverable";
+
+  const presets: Record<
+    string,
+    { amountInr: number; failureReason: string; label: string }
+  > = {
+    recoverable: {
+      amountInr: 2499,
+      failureReason: "insufficient funds",
+      label: "Standard recovery path",
+    },
+    escalate: {
+      amountInr: 30000,
+      failureReason: "card expired",
+      label: "Human escalation (amount > ₹25,000)",
+    },
+    reject: {
+      amountInr: 60000,
+      failureReason: "bank decline",
+      label: "Policy reject (amount > ₹50,000 max)",
+    },
+  };
+
+  const preset = presets[scenario] ?? presets.recoverable;
+  const suffix = `${Date.now()}`;
+  const amountPaise = preset.amountInr * 100;
+
+  const payload = {
+    event: "payment.failed",
+    id: `evt_demo_${scenario}_${suffix}`,
+    payload: {
+      payment: {
+        entity: {
+          id: `pay_demo_${scenario}_${suffix}`,
+          amount: amountPaise,
+          currency: "INR",
+          status: "failed",
+          method: "card",
+          error_reason: preset.failureReason,
+        },
+      },
+    },
+  };
+
+  const stored = await prisma.webhookEvent.create({
+    data: {
+      eventId: payload.id,
+      eventType: payload.event,
+      payload: payload as object,
+    },
+  });
+
+  await writeAudit({
+    eventType: "demo.triggered",
+    message: `Demo scenario "${scenario}": ${preset.label}`,
+    metadata: { scenario, amountInr: preset.amountInr, webhookEventId: stored.id },
+  });
+
+  await startRecoveryWorkflow({
+    webhookEventId: stored.id,
+    payload,
+  });
+
+  await prisma.webhookEvent.update({
+    where: { id: stored.id },
+    data: { processed: true, processedAt: new Date() },
+  });
+
+  const recoveryCase = await prisma.recoveryCase.findFirst({
+    where: { payment: { razorpayPaymentId: payload.payload.payment.entity.id } },
+    orderBy: { createdAt: "desc" },
+    include: {
+      decisions: true,
+      actions: true,
+      audits: { orderBy: { createdAt: "asc" } },
+    },
+  });
+
+  return res.json({
+    ok: true,
+    scenario,
+    label: preset.label,
+    amountInr: preset.amountInr,
+    case: recoveryCase,
+  });
 });
 
 /**
@@ -49,6 +146,12 @@ recoveryRouter.post("/cases/:id/execute", async (req, res) => {
 
   if (recoveryCase.status === "RECOVERED") {
     return res.status(400).json({ error: "Case already recovered" });
+  }
+
+  if (recoveryCase.status === "ESCALATED" || recoveryCase.status === "REJECTED") {
+    return res.status(400).json({
+      error: `Cannot execute — case is ${recoveryCase.status} (policy gate)`,
+    });
   }
 
   const action =

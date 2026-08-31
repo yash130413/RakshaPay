@@ -306,9 +306,10 @@ On `payment.captured`:
 |--------|------|---------|
 | `GET` | `/health` | Liveness + LLM configured flag |
 | `POST` | `/webhooks/razorpay` | Razorpay webhooks (raw body) |
-| `GET` | `/api/analytics/summary` | At risk / recovered / rate / action counts |
-| `GET` | `/api/recovery/cases` | Recent cases + actions + audits |
+| `GET` | `/api/analytics/summary` | At risk / recovered / rate / escalated / rejected counts |
+| `GET` | `/api/recovery/cases` | Recent cases + actions + decisions + audits |
 | `GET` | `/api/recovery/cases/:id` | Full case detail |
+| `POST` | `/api/recovery/demo/trigger` | Demo scenarios: recoverable / escalate / reject |
 | `POST` | `/api/recovery/cases/:id/execute` | Re-run Razorpay execution for queued cases |
 | `POST` | `/api/recovery/cases/:id/simulate-capture` | Dev-only capture simulation |
 | `GET` | `/api/recovery/audit` | Global audit log |
@@ -363,7 +364,7 @@ Never commit real secrets. Use `.env` locally; `.env.example` as template.
 | Day 1 | Done | Schema, webhook skeleton, policy, rule agents, APIs |
 | Day 2 | Done | Real Razorpay execute, capture → RECOVERED, dashboard cases |
 | Day 3 | Done | Gemini diagnosis + strategy + 30s timeout + rules fallback |
-| Day 4–5 | Next | Policy polish, richer context, stopping rules demo |
+| Day 4–5 | Done | Audit Trail UI, case detail, demo escalate/reject triggers |
 | Day 6 | Planned | Dashboard polish / audit UI |
 | Day 7 | Planned | Evaluation dataset + metrics |
 | Day 8–9 | Planned | Deploy + README + 5-min pitch |
