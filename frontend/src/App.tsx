@@ -173,7 +173,9 @@ export default function App() {
     [series]
   );
 
-  async function triggerDemo(scenario: "recoverable" | "escalate" | "reject") {
+  async function triggerDemo(
+    scenario: "recoverable" | "escalate" | "reject" | "full_recovery"
+  ) {
     setBusy(true);
     setToast(null);
     try {
@@ -231,6 +233,14 @@ export default function App() {
       <section className="demo-bar">
         <p className="demo-label">Demo scenarios (policy paths)</p>
         <div className="demo-actions">
+          <button
+            type="button"
+            className="primary-outline"
+            disabled={busy}
+            onClick={() => triggerDemo("full_recovery")}
+          >
+            Full recovery (fail → ₹ back)
+          </button>
           <button type="button" disabled={busy} onClick={() => triggerDemo("recoverable")}>
             Recoverable ₹2,499
           </button>

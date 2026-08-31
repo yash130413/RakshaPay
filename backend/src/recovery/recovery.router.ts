@@ -40,9 +40,10 @@ recoveryRouter.get("/cases/:id", async (req, res) => {
 /**
  * Demo triggers — bypass Razorpay signature so judges can see policy paths live.
  * Scenarios:
- *  - recoverable: ~₹2,499 → AI decide → policy approve → payment link
- *  - escalate:    ~₹30,000 → policy ESCALATE (human review threshold)
- *  - reject:      ~₹60,000 → policy REJECT (above max recovery amount)
+ *  - recoverable:   ~₹2,499 → AI decide → policy approve → payment link
+ *  - escalate:      ~₹30,000 → policy ESCALATE (human review threshold)
+ *  - reject:        ~₹60,000 → policy REJECT (above max recovery amount)
+ *  - full_recovery: recoverable + payment.captured verifier → RECOVERED
  */
 recoveryRouter.post("/demo/trigger", async (req, res) => {
   const scenario = (req.body?.scenario as string) ?? "recoverable";
@@ -66,19 +67,25 @@ recoveryRouter.post("/demo/trigger", async (req, res) => {
       failureReason: "bank decline",
       label: "Policy reject (amount > ₹50,000 max)",
     },
+    full_recovery: {
+      amountInr: 3499,
+      failureReason: "insufficient funds",
+      label: "Full loop: fail -> AI -> policy -> execute -> capture verify -> RECOVERED",
+    },
   };
 
   const preset = presets[scenario] ?? presets.recoverable;
   const suffix = `${Date.now()}`;
   const amountPaise = preset.amountInr * 100;
+  const paymentId = `pay_demo_${scenario}_${suffix}`;
 
-  const payload = {
+  const failPayload = {
     event: "payment.failed",
     id: `evt_demo_${scenario}_${suffix}`,
     payload: {
       payment: {
         entity: {
-          id: `pay_demo_${scenario}_${suffix}`,
+          id: paymentId,
           amount: amountPaise,
           currency: "INR",
           status: "failed",
@@ -91,9 +98,9 @@ recoveryRouter.post("/demo/trigger", async (req, res) => {
 
   const stored = await prisma.webhookEvent.create({
     data: {
-      eventId: payload.id,
-      eventType: payload.event,
-      payload: payload as object,
+      eventId: failPayload.id,
+      eventType: failPayload.event,
+      payload: failPayload as object,
     },
   });
 
@@ -105,7 +112,7 @@ recoveryRouter.post("/demo/trigger", async (req, res) => {
 
   await startRecoveryWorkflow({
     webhookEventId: stored.id,
-    payload,
+    payload: failPayload,
   });
 
   await prisma.webhookEvent.update({
@@ -113,15 +120,67 @@ recoveryRouter.post("/demo/trigger", async (req, res) => {
     data: { processed: true, processedAt: new Date() },
   });
 
-  const recoveryCase = await prisma.recoveryCase.findFirst({
-    where: { payment: { razorpayPaymentId: payload.payload.payment.entity.id } },
+  let recoveryCase = await prisma.recoveryCase.findFirst({
+    where: { payment: { razorpayPaymentId: paymentId } },
     orderBy: { createdAt: "desc" },
     include: {
       decisions: true,
       actions: true,
       audits: { orderBy: { createdAt: "asc" } },
+      results: true,
     },
   });
+
+  // Close the money loop via the real payment.captured verifier path
+  if (scenario === "full_recovery" && recoveryCase) {
+    const capturePayload = {
+      event: "payment.captured",
+      id: `evt_demo_capture_${suffix}`,
+      payload: {
+        payment: {
+          entity: {
+            id: `pay_demo_capture_${suffix}`,
+            amount: amountPaise,
+            currency: "INR",
+            status: "captured",
+            method: "card",
+            notes: {
+              recovery_case_id: recoveryCase.id,
+              source: "razorrecover_demo",
+            },
+          },
+        },
+      },
+    };
+
+    const captureEvent = await prisma.webhookEvent.create({
+      data: {
+        eventId: capturePayload.id,
+        eventType: capturePayload.event,
+        payload: capturePayload as object,
+      },
+    });
+
+    await startRecoveryWorkflow({
+      webhookEventId: captureEvent.id,
+      payload: capturePayload,
+    });
+
+    await prisma.webhookEvent.update({
+      where: { id: captureEvent.id },
+      data: { processed: true, processedAt: new Date() },
+    });
+
+    recoveryCase = await prisma.recoveryCase.findUnique({
+      where: { id: recoveryCase.id },
+      include: {
+        decisions: true,
+        actions: true,
+        audits: { orderBy: { createdAt: "asc" } },
+        results: true,
+      },
+    });
+  }
 
   return res.json({
     ok: true,

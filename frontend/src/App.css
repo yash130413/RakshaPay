@@ -176,6 +176,13 @@ button.primary {
   color: #fff;
 }
 
+button.primary-outline {
+  border-color: #059669;
+  background: #ecfdf5;
+  color: #065f46;
+  font-weight: 600;
+}
+
 button.filter {
   font-size: 0.7rem;
   padding: 0.25rem 0.5rem;

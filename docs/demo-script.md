@@ -1,7 +1,8 @@
 # RazorRecover — 5-Minute Demo Script
 
 **Audience:** Razorpay AI internship judges / engineers  
-**Goal:** Prove one closed-loop financial recovery agent — not a chatbot demo.
+**Goal:** Prove one closed-loop financial recovery agent — not a chatbot demo.  
+**Prefer:** Deployed Vercel + Render URLs ([deploy.md](./deploy.md)). Localhost is fine if cold-start is an issue.
 
 ---
 
@@ -19,146 +20,76 @@
 
 | Check | How |
 |--------|-----|
-| Backend live | `http://localhost:4000/health` → `ok: true`, `llm.configured: true` |
-| Frontend live | `http://localhost:5173` |
-| Neon DB | Cases API returns JSON |
-| Razorpay Test keys | Execute creates `plink_*` |
-| Gemini | New failure shows `diagnosis_gemini` / `strategy_gemini` |
-| Optional ngrok | Only if showing live Razorpay Dashboard webhooks |
-
-Have ready:
-
-- Dashboard URL
-- One browser tab on `/api/recovery/cases/:id` (or Network tab)
-- PowerShell / script for a signed `payment.failed` webhook **or** a prepared Test payment link fail path
+| API healthy | `/health` → `ok: true`, `llm.configured: true` |
+| Dashboard open | Vercel or `localhost:5173` |
+| Neon reachable | Cases/metrics load |
+| Demo buttons visible | Full recovery / Escalate / Reject |
 
 ---
 
 ## Minute-by-minute script
 
-### 0:00–0:40 — Dashboard (merchant pain)
+### 0:00–0:40 — Dashboard
 
-1. Open dashboard.
-2. Point to metrics:
-   - **At Risk** — failed revenue stuck in pipeline
-   - **Recovered** — money confirmed back
-   - **Recovery Rate** — recovered / (at risk + recovered)
-   - **Cases** — workflow instances
-3. Say: “This is what a merchant ops team would watch.”
+Show live KPIs + held-out **evaluation strip** (49.3% → 68.6% recovery, fewer retries).  
+“This is measured, not vibes.”
 
-### 0:40–1:20 — Trigger failure
+### 0:40–1:40 — Full money loop (one click)
 
-1. Fire a signed webhook (or Razorpay Test fail):
+Click **Full recovery (fail → ₹ back)**.
 
-   - Amount example: **₹3,499** (`349900` paise)
-   - Reason: `insufficient funds` or `card expired`
+Walk the case detail / audit:
 
-2. Show dashboard refresh (5s poll) — new case appears, status moves toward `WAITING_FOR_WEBHOOK`.
+1. `payment.failed`
+2. Gemini (or rules) diagnosis + strategy  
+3. `policy.approved`
+4. Razorpay action / waiting
+5. `payment.captured` verifier → **RECOVERED**
+6. Recovered ₹ and chart update
 
-**Talking point:** “We don’t poll Razorpay. We react to webhooks — production payment architecture.”
+**Talking point:** “Same verifier path as a real Razorpay capture webhook — demo payload, production control flow.”
 
-### 1:20–2:20 — AI decision (Gemini)
+### 1:40–2:30 — Policy gates
 
-1. Open case detail API or show diagnosis on UI:
+Click **Escalate ₹30,000** → `ESCALATED` (human threshold).  
+Click **Reject ₹60,000** → `REJECTED` (max recovery).  
 
-   - `agent: diagnosis_gemini`
-   - `agent: strategy_gemini`
-   - Structured fields: diagnosis, confidence, `recommendedAction`, probability
+“The model cannot bypass merchant policy.”
 
-2. Emphasize:
+### 2:30–3:20 — Agents + audit
 
-   - Output is **JSON**, not free text
-   - Action is from a **whitelist enum**
-   - If Gemini times out / fails → **rules fallback** (system stays available)
+Open case detail: `diagnosis_gemini` / `strategy_gemini` (or rules fallback).  
+Scroll global Audit Trail timestamps.
 
-**Talking point:** “Bounded agents. Zod validation. Fail closed to rules — never fail open to money movement.”
+### 3:20–4:10 — Real Razorpay story (optional if time)
 
-### 2:20–3:00 — Policy gate
+Show a case with `plink_*` / short URL from Test Mode execution, or explain ngrok/Render webhook URL for live `payment.failed` from Razorpay Dashboard.
 
-1. Show audit: `policy.approved` (or escalate/reject on a high-amount demo).
-2. Explain defaults:
+### 4:10–4:50 — Eval + stopping rules
 
-   - Max recovery amount ₹50,000
-   - Human review above ₹25,000
-   - Max retries = 2
-
-**Talking point:** “The model cannot bypass merchant policy. That’s the internship-relevant safety story.”
-
-### 3:00–3:40 — Razorpay execution
-
-1. Show `RecoveryAction`:
-
-   - `status: executed`
-   - `razorpayRefId: plink_...`
-   - `shortUrl: https://rzp.io/...`
-
-2. Optional: open the Test Mode payment link.
-
-**Talking point:** “This is a real Razorpay Test API call — not a mocked `setTimeout` success.”
-
-### 3:40–4:20 — Verify recovery
-
-**Path A (preferred live):** Customer pays on Test link → `payment.captured` webhook → status `RECOVERED`, Recovered ₹ increases.
-
-**Path B (reliable offline):**  
-`POST /api/recovery/cases/:id/simulate-capture` → same metric update for demo continuity.
-
-Show:
-
-- Case badge **RECOVERED**
-- Audit `recovery.confirmed`
-- Dashboard **Recovered** and **Recovery Rate** update
-
-### 4:20–4:50 — Audit trail + failure path
-
-1. Scroll audits:
-
-   ```
-   payment.failed → risk.detected → diagnosis.completed
-   → recovery.recommended → policy.approved → recovery.executed
-   → recovery.confirmed
-   ```
-
-2. **Deliberate failure / safety (10–20s):**
-
-   - Mention high amount → `ESCALATED` / `REJECTED`
-   - Or max retries → human escalation / stop
-   - “Stopping rules matter as much as recovery rate.”
+Point at evaluation strip again + unnecessary retries **0** vs baseline **1009**.  
+Mention max retries / amount caps.
 
 ### 4:50–5:00 — Close
 
 > “One loop: detect, diagnose, decide, gate, execute, verify, measure.  
-> Stack: Express, Prisma, Neon, Razorpay Test, Gemini Flash, bounded state machine.  
-> Happy to walk through the policy engine or webhook idempotency next.”
+> Happy to walk through webhook idempotency or the policy engine next.”
 
 ---
 
-## Backup demos (if live webhook flaky)
+## Backup
 
 | Problem | Backup |
 |---------|--------|
-| ngrok / Razorpay delay | Signed local webhook to `localhost:4000` |
-| Gemini slow | Show previous case with `*_gemini` in DB; mention 30s timeout + fallback |
-| Payment link pay awkward | `simulate-capture` then explain real capture path in code |
-| Empty dashboard | Pre-seed one recovered case before judges arrive |
+| Gemini timeout | Rules fallback still demos the loop |
+| Razorpay link create fails | Full recovery / escalate / reject still prove AI + policy + verify |
+| Render cold start | Hit `/health` first; or localhost |
 
 ---
 
-## Questions you should be ready for
+## Honesty notes (say if asked)
 
-| Question | Answer direction |
-|----------|------------------|
-| Why not let the LLM call Razorpay tools directly? | Financial blast radius; policy must be deterministic and auditable |
-| Why Gemini? | Free tier, JSON mode, fast enough; provider-swappable behind `llm.client` |
-| How do you prevent duplicate recoveries? | Webhook `eventId` uniqueness + case state machine |
-| How do you know money was recovered? | `payment.captured` webhook → verifier → `recoveredAmount` |
-| What’s next? | Evaluation harness (baseline vs agent), richer customer history context, deploy |
-
----
-
-## Demo anti-patterns (avoid)
-
-- Spending time on UI polish over the money loop
-- Claiming live Mode settlements
-- Hiding that Test Mode / simulate-capture was used — be honest, then show real `plink_*` creation
-- Showing only LLM chat without policy / webhook / audit
+- Demo triggers skip Razorpay signature so judges aren’t blocked by ngrok mid-pitch.  
+- Production path still verifies HMAC on `/webhooks/razorpay`.  
+- Evaluation is offline held-out simulation mirroring backend rules + policy.  
+- Internship demo uses **Test Mode** only.

@@ -88,7 +88,7 @@ Full instructions: [docs/setup-and-testing.md](./docs/setup-and-testing.md).
 | Razorpay Test payment link execution | Done |
 | `payment.captured` → RECOVERED | Done |
 | Merchant dashboard (metrics + cases) | Done |
-| Evaluation harness / deploy polish | Eval done · deploy next |
+| Evaluation harness / deploy polish | Eval done · deploy configs ready |
 
 ## Evaluation snapshot (holdout, n=885)
 
@@ -100,7 +100,8 @@ Full instructions: [docs/setup-and-testing.md](./docs/setup-and-testing.md).
 | Unnecessary retries | 1009 | **0** |
 
 Full report: [evaluation/results/comparison.md](./evaluation/results/comparison.md)  
-How to reproduce: [evaluation/README.md](./evaluation/README.md)
+How to reproduce: [evaluation/README.md](./evaluation/README.md)  
+Deploy: [docs/deploy.md](./docs/deploy.md)
 
 ## Safety model
 

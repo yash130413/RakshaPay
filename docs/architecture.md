@@ -368,7 +368,7 @@ Never commit real secrets. Use `.env` locally; `.env.example` as template.
 | Day 4–5 | Done | Audit Trail UI, case detail, demo escalate/reject triggers |
 | Day 6 | Done | Chart (Recharts), eval metrics strip, empty states, layout polish |
 | Day 7 | Done | Offline eval: baseline vs RazorRecover on holdout synthetic set |
-| Day 8–9 | Planned | Deploy + README + 5-min pitch |
+| Day 8–9 | Ready | Deploy configs (Render/Vercel) + full_recovery demo + deploy docs |
 
 ---
 
