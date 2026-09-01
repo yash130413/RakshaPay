@@ -1,10 +1,13 @@
 import { Router } from "express";
 import { prisma } from "../db.js";
 import { EVAL_SNAPSHOT } from "./eval.snapshot.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 
 export const analyticsRouter = Router();
 
-analyticsRouter.get("/summary", async (_req, res) => {
+analyticsRouter.get(
+  "/summary",
+  asyncHandler(async (_req, res) => {
   const [atRiskAgg, recoveredAgg, cases, actions, escalated, rejected, recovered] =
     await Promise.all([
       prisma.recoveryCase.aggregate({
@@ -49,12 +52,15 @@ analyticsRouter.get("/summary", async (_req, res) => {
       count: a._count,
     })),
   });
-});
+  })
+);
 
 /**
  * Time series for dashboard chart — daily failed (at-risk inflow) vs recovered.
  */
-analyticsRouter.get("/series", async (_req, res) => {
+analyticsRouter.get(
+  "/series",
+  asyncHandler(async (_req, res) => {
   const cases = await prisma.recoveryCase.findMany({
     orderBy: { createdAt: "asc" },
     select: {
@@ -111,7 +117,8 @@ analyticsRouter.get("/series", async (_req, res) => {
   });
 
   res.json({ series: cumulative });
-});
+  })
+);
 
 analyticsRouter.get("/evaluation", (_req, res) => {
   res.json(EVAL_SNAPSHOT);

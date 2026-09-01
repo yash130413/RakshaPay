@@ -5,6 +5,8 @@ import { webhookRouter } from "./razorpay/webhook.handler.js";
 import { analyticsRouter } from "./analytics/analytics.router.js";
 import { recoveryRouter } from "./recovery/recovery.router.js";
 import { isLlmConfigured } from "./agents/index.js";
+import { connectDatabaseWithRetry } from "./db.js";
+import { errorHandler } from "./utils/errorHandler.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
@@ -40,6 +42,22 @@ app.get("/health", (_req, res) => {
 app.use("/api/recovery", recoveryRouter);
 app.use("/api/analytics", analyticsRouter);
 
-app.listen(port, () => {
-  console.log(`RazorRecover API listening on http://localhost:${port}`);
-});
+app.use(errorHandler);
+
+async function start() {
+  try {
+    await connectDatabaseWithRetry();
+  } catch (err) {
+    console.error(
+      "Could not connect to database. Check DATABASE_URL in backend/.env (Neon project may be paused)."
+    );
+    console.error(err instanceof Error ? err.message.split("\n")[0] : err);
+    process.exit(1);
+  }
+
+  app.listen(port, () => {
+    console.log(`RazorRecover API listening on http://localhost:${port}`);
+  });
+}
+
+void start();

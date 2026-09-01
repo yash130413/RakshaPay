@@ -3,10 +3,13 @@ import { prisma } from "../db.js";
 import { writeAudit } from "../audit/audit.service.js";
 import { executeRecoveryAction } from "./recovery.executor.js";
 import { startRecoveryWorkflow } from "../workflows/recovery.workflow.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
 
 export const recoveryRouter = Router();
 
-recoveryRouter.get("/cases", async (_req, res) => {
+recoveryRouter.get(
+  "/cases",
+  asyncHandler(async (_req, res) => {
   const cases = await prisma.recoveryCase.findMany({
     orderBy: { createdAt: "desc" },
     take: 50,
@@ -17,11 +20,15 @@ recoveryRouter.get("/cases", async (_req, res) => {
     },
   });
   res.json(cases);
-});
+  })
+);
 
-recoveryRouter.get("/cases/:id", async (req, res) => {
-  const recoveryCase = await prisma.recoveryCase.findUnique({
-    where: { id: req.params.id },
+recoveryRouter.get(
+  "/cases/:id",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const recoveryCase = await prisma.recoveryCase.findUnique({
+      where: { id },
     include: {
       decisions: { orderBy: { createdAt: "asc" } },
       actions: true,
@@ -35,7 +42,8 @@ recoveryRouter.get("/cases/:id", async (req, res) => {
   }
 
   return res.json(recoveryCase);
-});
+  })
+);
 
 /**
  * Demo triggers — bypass Razorpay signature so judges can see policy paths live.
@@ -45,7 +53,9 @@ recoveryRouter.get("/cases/:id", async (req, res) => {
  *  - reject:        ~₹60,000 → policy REJECT (above max recovery amount)
  *  - full_recovery: recoverable + payment.captured verifier → RECOVERED
  */
-recoveryRouter.post("/demo/trigger", async (req, res) => {
+recoveryRouter.post(
+  "/demo/trigger",
+  asyncHandler(async (req, res) => {
   const scenario = (req.body?.scenario as string) ?? "recoverable";
 
   const presets: Record<
@@ -189,14 +199,18 @@ recoveryRouter.post("/demo/trigger", async (req, res) => {
     amountInr: preset.amountInr,
     case: recoveryCase,
   });
-});
+  })
+);
 
 /**
  * Re-run Razorpay execution for a queued / failed case (useful for Day-1 queued rows).
  */
-recoveryRouter.post("/cases/:id/execute", async (req, res) => {
-  const recoveryCase = await prisma.recoveryCase.findUnique({
-    where: { id: req.params.id },
+recoveryRouter.post(
+  "/cases/:id/execute",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const recoveryCase = await prisma.recoveryCase.findUnique({
+      where: { id },
   });
 
   if (!recoveryCase) {
@@ -267,15 +281,19 @@ recoveryRouter.post("/cases/:id/execute", async (req, res) => {
   }
 
   return res.json({ ok: execution.ok, action: saved, execution });
-});
+  })
+);
 
 /**
  * Dev helper: mark a waiting case recovered (simulates payment.captured).
  * Use when you can't complete a real Test Mode payment.
  */
-recoveryRouter.post("/cases/:id/simulate-capture", async (req, res) => {
-  const recoveryCase = await prisma.recoveryCase.findUnique({
-    where: { id: req.params.id },
+recoveryRouter.post(
+  "/cases/:id/simulate-capture",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const recoveryCase = await prisma.recoveryCase.findUnique({
+      where: { id },
   });
 
   if (!recoveryCase) {
@@ -314,12 +332,16 @@ recoveryRouter.post("/cases/:id/simulate-capture", async (req, res) => {
   });
 
   return res.json({ ok: true, recoveredAmount: recoveryCase.amount / 100 });
-});
+  })
+);
 
-recoveryRouter.get("/audit", async (_req, res) => {
+recoveryRouter.get(
+  "/audit",
+  asyncHandler(async (_req, res) => {
   const logs = await prisma.auditLog.findMany({
     orderBy: { createdAt: "desc" },
     take: 100,
   });
   res.json(logs);
-});
+  })
+);
