@@ -105,7 +105,6 @@ export function CasesView({
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm text-foreground">{summary}</p>
                         <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                          <AiSourceBadge decisions={c.decisions} className="text-[10px]" />
                           {c.status === "RECOVERED" && (
                             <span className="text-[11px] font-medium text-recovery">
                               +{formatInr(c.recoveredAmount / 100)}
@@ -114,9 +113,12 @@ export function CasesView({
                         </div>
                       </div>
 
-                      <div className="flex shrink-0 items-center gap-2">
-                        <StatusBadge status={c.status} />
-                        <ChevronRight className="size-4 text-muted-foreground" />
+                      <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center">
+                        <AiSourceBadge decisions={c.decisions} />
+                        <div className="flex items-center gap-2">
+                          <StatusBadge status={c.status} />
+                          <ChevronRight className="size-4 text-muted-foreground" />
+                        </div>
                       </div>
                     </button>
                   </li>

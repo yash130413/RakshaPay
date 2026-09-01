@@ -1,13 +1,14 @@
 import type { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
-import type { DashboardTab, DemoScenario } from "@/lib/types";
+import type { ApiHealth, DashboardTab, DemoScenario } from "@/lib/types";
 
 type DashboardLayoutProps = {
   activeTab: DashboardTab;
   onTabChange: (tab: DashboardTab) => void;
   merchantName: string;
   backendOnline: boolean;
+  health: ApiHealth | null;
   refreshing?: boolean;
   busy: boolean;
   onRunDemo: (scenario: DemoScenario) => void;
@@ -19,6 +20,7 @@ export function DashboardLayout({
   onTabChange,
   merchantName,
   backendOnline,
+  health,
   refreshing = false,
   busy,
   onRunDemo,
@@ -31,6 +33,7 @@ export function DashboardLayout({
         <TopBar
           merchantName={merchantName}
           backendOnline={backendOnline}
+          health={health}
           refreshing={refreshing}
           busy={busy}
           onRunDemo={onRunDemo}

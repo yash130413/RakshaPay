@@ -11,7 +11,7 @@ const NAV_ITEMS: { id: DashboardTab; label: string; icon: typeof LayoutDashboard
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "cases", label: "Cases", icon: ClipboardList },
   { id: "audit", label: "Audit", icon: ScrollText },
-  { id: "evaluation", label: "Evaluation", icon: BarChart3 },
+  { id: "evaluation", label: "Research", icon: BarChart3 },
 ];
 
 type SidebarProps = {
@@ -25,7 +25,7 @@ export function Sidebar({ active, onChange }: SidebarProps) {
       <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-card md:flex">
         <div className="border-b border-border px-5 py-5">
           <p className="text-lg font-bold tracking-tight text-foreground">RazorRecover</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">Revenue recovery agent</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Track 03 · AI recovery agent</p>
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
           {NAV_ITEMS.map(({ id, label, icon: Icon }) => (

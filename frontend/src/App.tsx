@@ -14,6 +14,7 @@ import { EvaluationView } from "@/components/views/EvaluationView";
 import { OverviewView } from "@/components/views/OverviewView";
 import { shortDate } from "@/lib/format";
 import type {
+  ApiHealth,
   AuditLog,
   DashboardTab,
   DemoScenario,
@@ -34,6 +35,7 @@ export default function App() {
   const [audits, setAudits] = useState<AuditLog[]>([]);
   const [series, setSeries] = useState<SeriesPoint[]>([]);
   const [evaluation, setEvaluation] = useState<EvalSnapshot | null>(null);
+  const [health, setHealth] = useState<ApiHealth | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -46,13 +48,15 @@ export default function App() {
     if (isPoll) setRefreshing(true);
 
     Promise.all([
+      fetch(`${API}/health`).then((r) => r.json()),
       fetch(`${API}/api/analytics/summary`).then((r) => r.json()),
       fetch(`${API}/api/recovery/cases`).then((r) => r.json()),
       fetch(`${API}/api/recovery/audit`).then((r) => r.json()),
       fetch(`${API}/api/analytics/series`).then((r) => r.json()),
       fetch(`${API}/api/analytics/evaluation`).then((r) => r.json()),
     ])
-      .then(([s, c, a, ser, ev]) => {
+      .then(([h, s, c, a, ser, ev]) => {
+        setHealth(h?.ok ? h : null);
         setSummary(s?.error ? null : s);
         setCases(Array.isArray(c) ? c : []);
         setAudits(Array.isArray(a) ? a : []);
@@ -60,7 +64,10 @@ export default function App() {
         setEvaluation(ev?.highlights ? ev : null);
         setError(null);
       })
-      .catch(() => setError("Backend offline — start backend on :4000"))
+      .catch(() => {
+        setHealth(null);
+        setError("Backend offline — start backend on :4000");
+      })
       .finally(() => {
         setInitialLoading(false);
         setRefreshing(false);
@@ -93,6 +100,7 @@ export default function App() {
   );
 
   const hasData = summary !== null || cases.length > 0;
+  const backendOnline = !error;
 
   async function triggerDemo(scenario: DemoScenario) {
     setBusy(true);
@@ -150,7 +158,16 @@ export default function App() {
 
     switch (activeTab) {
       case "overview":
-        return <OverviewView summary={summary} chartData={chartData} />;
+        return (
+          <OverviewView
+            summary={summary}
+            chartData={chartData}
+            cases={cases}
+            health={health}
+            backendOnline={backendOnline}
+            onOpenResearch={() => setActiveTab("evaluation")}
+          />
+        );
       case "cases":
         return (
           <CasesView
@@ -179,7 +196,8 @@ export default function App() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         merchantName={MERCHANT_NAME}
-        backendOnline={!error}
+        backendOnline={backendOnline}
+        health={health}
         refreshing={refreshing}
         busy={busy}
         onRunDemo={triggerDemo}

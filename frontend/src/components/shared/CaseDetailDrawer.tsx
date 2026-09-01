@@ -165,7 +165,9 @@ export function CaseDetailDrawer({
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div>
             <p className="text-sm font-semibold text-foreground">Case detail</p>
-            <p className="text-xs text-muted-foreground">Flow · AI · audit trail</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <AiSourceBadge decisions={selected.decisions} />
+            </div>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
             <X className="size-4" />

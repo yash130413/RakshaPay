@@ -59,7 +59,29 @@ export type SeriesPoint = {
 export type EvalSnapshot = {
   n: number;
   split: string;
+  seed?: number;
+  baseline?: {
+    recoveryRate: number;
+    revenueRecovered: number;
+    retries: number;
+    unnecessaryRetries: number;
+  };
+  razorrecover?: {
+    recoveryRate: number;
+    revenueRecovered: number;
+    retries: number;
+    unnecessaryRetries: number;
+  };
   highlights: { label: string; baseline: string; agent: string; delta: string }[];
+};
+
+export type ApiHealth = {
+  ok: boolean;
+  llm?: {
+    configured: boolean;
+    model: string;
+    provider: string;
+  };
 };
 
 export type StatusFilter = "ALL" | "WAITING_FOR_WEBHOOK" | "RECOVERED" | "ESCALATED" | "REJECTED";
