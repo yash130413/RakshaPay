@@ -9,9 +9,9 @@ import {
   YAxis,
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { MetricCard } from "@/components/shared/MetricCard";
+import { HeroMetrics } from "@/components/shared/HeroMetrics";
 import { formatInr } from "@/lib/format";
 import type { SeriesPoint, Summary } from "@/lib/types";
 
@@ -22,35 +22,16 @@ type OverviewViewProps = {
 
 export function OverviewView({ summary, chartData }: OverviewViewProps) {
   return (
-    <div className="space-y-6">
-      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="At Risk" value={formatInr(summary?.revenueAtRisk ?? 0)} />
-        <MetricCard
-          label="Recovered"
-          value={formatInr(summary?.recovered ?? 0)}
-          tone="recovery"
-        />
-        <MetricCard
-          label="Recovery Rate"
-          value={`${((summary?.recoveryRate ?? 0) * 100).toFixed(1)}%`}
-        />
-        <MetricCard label="Cases" value={summary?.totalCases ?? 0} />
-      </section>
-
-      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <MetricCard label="Recovered cases" value={summary?.recoveredCases ?? 0} tone="recovery" />
-        <MetricCard label="Escalated" value={summary?.escalatedCases ?? 0} tone="escalate" />
-        <MetricCard label="Rejected" value={summary?.rejectedCases ?? 0} tone="reject" />
-        <MetricCard
-          label="AI actions"
-          value={(summary?.actions ?? []).reduce((n, a) => n + a.count, 0)}
-        />
-      </section>
+    <div className="space-y-8">
+      <HeroMetrics summary={summary} />
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle>Revenue recovery</CardTitle>
-          <Badge variant="muted">cumulative INR</Badge>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+          <div>
+            <CardTitle className="text-base">Revenue recovery</CardTitle>
+            <CardDescription>Cumulative failed inflow vs recovered INR</CardDescription>
+          </div>
+          <Badge variant="muted">Live</Badge>
         </CardHeader>
         <CardContent>
           {chartData.length === 0 ? (
@@ -113,8 +94,9 @@ export function OverviewView({ summary, chartData }: OverviewViewProps) {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>AI Actions</CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">AI actions</CardTitle>
+          <CardDescription>Recommended recovery actions taken by the agent</CardDescription>
         </CardHeader>
         <CardContent>
           {(summary?.actions?.length ?? 0) === 0 ? (

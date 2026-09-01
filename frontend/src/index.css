@@ -134,4 +134,17 @@
   .text-balance {
     text-wrap: balance;
   }
+
+  .drawer-slide-in {
+    animation: drawer-slide-in 0.22s ease-out;
+  }
+
+  @keyframes drawer-slide-in {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
 }

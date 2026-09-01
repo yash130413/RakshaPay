@@ -148,6 +148,7 @@ export default function App() {
           selected={selected}
           selectedId={selectedId}
           onSelectCase={setSelectedId}
+          onCloseCase={() => setSelectedId(null)}
           busy={busy}
           onSimulateCapture={simulateCapture}
         />
