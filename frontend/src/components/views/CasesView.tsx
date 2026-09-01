@@ -1,11 +1,11 @@
 import { ChevronRight } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { AiSourceBadge } from "@/components/shared/AiSourceBadge";
 import { CaseDetailDrawer } from "@/components/shared/CaseDetailDrawer";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { agentSource, formatInr, formatTime } from "@/lib/format";
+import { formatInr, formatTime } from "@/lib/format";
 import { formatCaseSummary, formatFilterLabel } from "@/lib/status";
 import type { RecoveryCase, StatusFilter } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -79,7 +79,6 @@ export function CasesView({
           ) : (
             <ul className="divide-y divide-border">
               {filteredCases.slice(0, 30).map((c) => {
-                const source = agentSource(c.decisions);
                 const isSelected = selectedId === c.id;
                 const summary = formatCaseSummary(c);
 
@@ -106,14 +105,7 @@ export function CasesView({
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm text-foreground">{summary}</p>
                         <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                          {source && (
-                            <Badge
-                              variant={source === "gemini" ? "gemini" : "rules"}
-                              className="text-[10px]"
-                            >
-                              {source}
-                            </Badge>
-                          )}
+                          <AiSourceBadge decisions={c.decisions} className="text-[10px]" />
                           {c.status === "RECOVERED" && (
                             <span className="text-[11px] font-medium text-recovery">
                               +{formatInr(c.recoveredAmount / 100)}

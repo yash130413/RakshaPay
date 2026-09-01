@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { ToastContainer, useToast } from "@/components/shared/Toast";
+import {
+  AuditSkeleton,
+  CasesSkeleton,
+  EvaluationSkeleton,
+  OverviewSkeleton,
+} from "@/components/shared/ViewSkeletons";
 import { AuditView } from "@/components/views/AuditView";
 import { CasesView } from "@/components/views/CasesView";
 import { EvaluationView } from "@/components/views/EvaluationView";
@@ -28,12 +35,16 @@ export default function App() {
   const [series, setSeries] = useState<SeriesPoint[]>([]);
   const [evaluation, setEvaluation] = useState<EvalSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<StatusFilter>("ALL");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const { toasts, show: showToast, dismiss: dismissToast } = useToast();
 
-  const load = useCallback(() => {
+  const load = useCallback((isPoll = false) => {
+    if (isPoll) setRefreshing(true);
+
     Promise.all([
       fetch(`${API}/api/analytics/summary`).then((r) => r.json()),
       fetch(`${API}/api/recovery/cases`).then((r) => r.json()),
@@ -49,12 +60,16 @@ export default function App() {
         setEvaluation(ev?.highlights ? ev : null);
         setError(null);
       })
-      .catch(() => setError("Backend offline — start backend on :4000"));
+      .catch(() => setError("Backend offline — start backend on :4000"))
+      .finally(() => {
+        setInitialLoading(false);
+        setRefreshing(false);
+      });
   }, []);
 
   useEffect(() => {
-    load();
-    const id = setInterval(load, 5000);
+    load(false);
+    const id = setInterval(() => load(true), 5000);
     return () => clearInterval(id);
   }, [load]);
 
@@ -77,9 +92,10 @@ export default function App() {
     [series]
   );
 
+  const hasData = summary !== null || cases.length > 0;
+
   async function triggerDemo(scenario: DemoScenario) {
     setBusy(true);
-    setToast(null);
     try {
       const res = await fetch(`${API}/api/recovery/demo/trigger`, {
         method: "POST",
@@ -88,14 +104,14 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Demo trigger failed");
-      setToast(`${data.label} → status ${data.case?.status ?? "?"}`);
+      showToast(`${data.label} → ${data.case?.status ?? "?"}`, "success");
       if (data.case?.id) {
         setSelectedId(data.case.id);
         setActiveTab("cases");
       }
-      load();
+      load(true);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Demo failed");
+      showToast(e instanceof Error ? e.message : "Demo failed", "error");
     } finally {
       setBusy(false);
     }
@@ -109,54 +125,73 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Capture failed");
-      setToast(`Recovered ₹${data.recoveredAmount}`);
-      load();
+      showToast(`Recovered ₹${data.recoveredAmount}`, "success");
+      load(true);
     } catch (e) {
-      setToast(e instanceof Error ? e.message : "Capture failed");
+      showToast(e instanceof Error ? e.message : "Capture failed", "error");
     } finally {
       setBusy(false);
     }
   }
 
-  return (
-    <DashboardLayout
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      merchantName={MERCHANT_NAME}
-      backendOnline={!error}
-      busy={busy}
-      onRunDemo={triggerDemo}
-    >
-      {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      {toast && (
-        <Alert variant="success" className="mb-4">
-          <AlertDescription>{toast}</AlertDescription>
-        </Alert>
-      )}
+  function renderActiveView() {
+    if (initialLoading && !hasData) {
+      switch (activeTab) {
+        case "cases":
+          return <CasesSkeleton />;
+        case "audit":
+          return <AuditSkeleton />;
+        case "evaluation":
+          return <EvaluationSkeleton />;
+        default:
+          return <OverviewSkeleton />;
+      }
+    }
 
-      {activeTab === "overview" && <OverviewView summary={summary} chartData={chartData} />}
-      {activeTab === "cases" && (
-        <CasesView
-          cases={cases}
-          filteredCases={filteredCases}
-          filter={filter}
-          onFilterChange={setFilter}
-          selected={selected}
-          selectedId={selectedId}
-          onSelectCase={setSelectedId}
-          onCloseCase={() => setSelectedId(null)}
-          busy={busy}
-          onSimulateCapture={simulateCapture}
-        />
-      )}
-      {activeTab === "audit" && (
-        <AuditView audits={audits} selectedCaseId={selectedId} />
-      )}
-      {activeTab === "evaluation" && <EvaluationView evaluation={evaluation} />}
-    </DashboardLayout>
+    switch (activeTab) {
+      case "overview":
+        return <OverviewView summary={summary} chartData={chartData} />;
+      case "cases":
+        return (
+          <CasesView
+            cases={cases}
+            filteredCases={filteredCases}
+            filter={filter}
+            onFilterChange={setFilter}
+            selected={selected}
+            selectedId={selectedId}
+            onSelectCase={setSelectedId}
+            onCloseCase={() => setSelectedId(null)}
+            busy={busy}
+            onSimulateCapture={simulateCapture}
+          />
+        );
+      case "audit":
+        return <AuditView audits={audits} selectedCaseId={selectedId} />;
+      case "evaluation":
+        return <EvaluationView evaluation={evaluation} />;
+    }
+  }
+
+  return (
+    <>
+      <DashboardLayout
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        merchantName={MERCHANT_NAME}
+        backendOnline={!error}
+        refreshing={refreshing}
+        busy={busy}
+        onRunDemo={triggerDemo}
+      >
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {renderActiveView()}
+      </DashboardLayout>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+    </>
   );
 }

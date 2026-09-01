@@ -2,7 +2,10 @@ import { useEffect } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { agentSource, formatInr, formatTime } from "@/lib/format";
+import { AiSourceBadge } from "@/components/shared/AiSourceBadge";
+import { AuditTimeline } from "@/components/shared/AuditTimeline";
+import { RecoveryFlowStepper } from "@/components/shared/RecoveryFlowStepper";
+import { formatInr, formatTime } from "@/lib/format";
 import type { RecoveryCase } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 
@@ -17,8 +20,6 @@ export function CaseDetailContent({
   busy,
   onSimulateCapture,
 }: CaseDetailContentProps) {
-  const source = agentSource(selected.decisions);
-
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
@@ -33,13 +34,14 @@ export function CaseDetailContent({
         <StatusBadge status={selected.status} size="md" />
       </div>
 
+      <AiSourceBadge decisions={selected.decisions} />
+
       <div className="flex flex-wrap gap-1.5">
-        {source && (
-          <Badge variant={source === "gemini" ? "gemini" : "rules"}>{source}</Badge>
-        )}
         {selected.status === "ESCALATED" && <Badge variant="escalate">Needs human</Badge>}
         {selected.status === "REJECTED" && <Badge variant="reject">Policy blocked</Badge>}
       </div>
+
+      <RecoveryFlowStepper recoveryCase={selected} />
 
       {selected.expectedRecoveryProbability != null && (
         <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
@@ -86,20 +88,13 @@ export function CaseDetailContent({
         {(selected.audits?.length ?? 0) === 0 ? (
           <p className="mt-2 text-sm text-muted-foreground">No audit events for this case.</p>
         ) : (
-          <ol className="mt-2 max-h-[240px] space-y-1 overflow-auto">
-            {selected.audits!.map((a) => (
-              <li
-                key={a.id}
-                className="grid gap-1 rounded-md border border-transparent px-2 py-1.5 text-sm hover:border-border hover:bg-muted/30 sm:grid-cols-[4.5rem_9rem_1fr]"
-              >
-                <span className="tabular-nums text-[11px] text-muted-foreground">
-                  {formatTime(a.createdAt)}
-                </span>
-                <span className="truncate font-mono text-[10px] text-recovery">{a.eventType}</span>
-                <span className="text-foreground">{a.message}</span>
-              </li>
-            ))}
-          </ol>
+          <div className="mt-3">
+            <AuditTimeline
+              audits={selected.audits!}
+              maxHeight="max-h-[280px]"
+              compact
+            />
+          </div>
         )}
       </div>
 
@@ -170,7 +165,7 @@ export function CaseDetailDrawer({
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div>
             <p className="text-sm font-semibold text-foreground">Case detail</p>
-            <p className="text-xs text-muted-foreground">Policy · AI · audit trail</p>
+            <p className="text-xs text-muted-foreground">Flow · AI · audit trail</p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
             <X className="size-4" />

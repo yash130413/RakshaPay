@@ -5,11 +5,18 @@ import type { DemoScenario } from "@/lib/types";
 type TopBarProps = {
   merchantName: string;
   backendOnline: boolean;
+  refreshing?: boolean;
   busy: boolean;
   onRunDemo: (scenario: DemoScenario) => void;
 };
 
-export function TopBar({ merchantName, backendOnline, busy, onRunDemo }: TopBarProps) {
+export function TopBar({
+  merchantName,
+  backendOnline,
+  refreshing = false,
+  busy,
+  onRunDemo,
+}: TopBarProps) {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-6">
@@ -21,7 +28,7 @@ export function TopBar({ merchantName, backendOnline, busy, onRunDemo }: TopBarP
             <span className="hidden text-sm text-muted-foreground md:inline">/</span>
             <span className="truncate text-sm font-medium text-foreground">{merchantName}</span>
             <Badge variant={backendOnline ? "live" : "reject"}>
-              {backendOnline ? "● LIVE" : "OFFLINE"}
+              {backendOnline ? (refreshing ? "↻ Syncing" : "● LIVE") : "OFFLINE"}
             </Badge>
             <Badge variant="outline">Test Mode</Badge>
           </div>
