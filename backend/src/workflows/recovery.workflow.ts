@@ -6,6 +6,10 @@ import {
   diagnoseFailure,
   verifyRecovery,
 } from "../agents/index.js";
+import {
+  recordCustomerRecovery,
+  resolveCustomerContext,
+} from "../customers/customer.context.js";
 import { evaluatePolicy } from "../policy/policy.engine.js";
 import { executeRecoveryAction } from "../recovery/recovery.executor.js";
 
@@ -81,6 +85,12 @@ export async function startRecoveryWorkflow(params: {
     return;
   }
 
+  const customerCtx = await resolveCustomerContext({
+    merchantId: merchant.id,
+    email: paymentEntity?.email,
+    contact: paymentEntity?.contact,
+  });
+
   let payment =
     paymentEntity?.id
       ? await prisma.payment.findUnique({
@@ -92,6 +102,7 @@ export async function startRecoveryWorkflow(params: {
     payment = await prisma.payment.create({
       data: {
         merchantId: merchant.id,
+        customerId: customerCtx?.customerId,
         razorpayPaymentId: paymentEntity.id,
         amount,
         currency: paymentEntity.currency ?? "INR",
@@ -100,11 +111,17 @@ export async function startRecoveryWorkflow(params: {
         failureReason,
       },
     });
+  } else if (payment && customerCtx && !payment.customerId) {
+    payment = await prisma.payment.update({
+      where: { id: payment.id },
+      data: { customerId: customerCtx.customerId },
+    });
   }
 
   const recoveryCase = await prisma.recoveryCase.create({
     data: {
       merchantId: merchant.id,
+      customerId: customerCtx?.customerId,
       paymentId: payment?.id,
       amount,
       currency: paymentEntity?.currency ?? "INR",
@@ -117,7 +134,15 @@ export async function startRecoveryWorkflow(params: {
     recoveryCaseId: recoveryCase.id,
     eventType: "payment.failed",
     message: `Payment failed for ₹${amount / 100}`,
-    metadata: { razorpayPaymentId: paymentEntity?.id },
+    metadata: {
+      razorpayPaymentId: paymentEntity?.id,
+      customerHistory: customerCtx
+        ? {
+            successfulPayments: customerCtx.successfulPayments,
+            isLoyalCustomer: customerCtx.isLoyalCustomer,
+          }
+        : null,
+    },
   });
 
   await prisma.recoveryCase.update({
@@ -125,7 +150,11 @@ export async function startRecoveryWorkflow(params: {
     data: { status: "ANALYZING" },
   });
 
-  const risk = await detectRevenueRisk({ eventType, amount });
+  const risk = await detectRevenueRisk({
+    eventType,
+    amount,
+    status: paymentEntity?.status,
+  });
   await writeAudit({
     recoveryCaseId: recoveryCase.id,
     eventType: "risk.detected",
@@ -146,6 +175,9 @@ export async function startRecoveryWorkflow(params: {
     method: paymentEntity?.method,
     previousAttempts: 0,
     amountInr: amount / 100,
+    successfulPayments: customerCtx?.successfulPayments ?? 0,
+    avgAmountInr: customerCtx?.avgAmountInr ?? 0,
+    isLoyalCustomer: customerCtx?.isLoyalCustomer ?? false,
   });
 
   await prisma.recoveryCase.update({
@@ -183,7 +215,8 @@ export async function startRecoveryWorkflow(params: {
     diagnosis: diagnosis.diagnosis,
     amount: amount / 100,
     previousAttempts: attemptCount,
-    successfulPayments: 0,
+    successfulPayments: customerCtx?.successfulPayments ?? 0,
+    isLoyalCustomer: customerCtx?.isLoyalCustomer ?? false,
     failureCategory: diagnosis.failureCategory,
   });
 
@@ -339,11 +372,6 @@ async function handlePaymentCaptured(params: {
   const notes = paymentEntity?.notes ?? {};
   const caseIdFromNotes = notes.recovery_case_id;
 
-  const verification = await verifyRecovery({
-    eventType: "payment.captured",
-    amount,
-  });
-
   let recoveryCase = caseIdFromNotes
     ? await prisma.recoveryCase.findUnique({ where: { id: caseIdFromNotes } })
     : null;
@@ -365,6 +393,14 @@ async function handlePaymentCaptured(params: {
       orderBy: { createdAt: "asc" },
     });
   }
+
+  const verification = await verifyRecovery({
+    eventType: "payment.captured",
+    amount,
+    expectedAmountPaise: recoveryCase?.amount,
+    recoveryCaseId: recoveryCase?.id,
+    noteCaseId: caseIdFromNotes,
+  });
 
   if (paymentEntity?.id) {
     await prisma.payment.upsert({
@@ -389,7 +425,18 @@ async function handlePaymentCaptured(params: {
         webhookEventId,
         recoveredAmount: verification.recoveredAmount,
         razorpayPaymentId: paymentEntity?.id,
+        verification,
       },
+    });
+    return;
+  }
+
+  if (!verification.success) {
+    await writeAudit({
+      recoveryCaseId: recoveryCase.id,
+      eventType: "recovery.verification_failed",
+      message: verification.notes,
+      metadata: { verification, amount, expectedAmountPaise: recoveryCase.amount },
     });
     return;
   }
@@ -420,14 +467,22 @@ async function handlePaymentCaptured(params: {
     data: { status: "succeeded" },
   });
 
+  if (recoveryCase.customerId) {
+    await recordCustomerRecovery({
+      customerId: recoveryCase.customerId,
+      recoveredAmountPaise: amount,
+    });
+  }
+
   await writeAudit({
     recoveryCaseId: recoveryCase.id,
     eventType: "recovery.confirmed",
-    message: `Recovered ₹${amount / 100} via payment.captured`,
+    message: `Recovered ₹${amount / 100} via payment.captured (${verification.notes})`,
     metadata: {
       webhookEventId,
       recoveredAmount: amount,
       razorpayPaymentId: paymentEntity?.id,
+      verification,
     },
   });
 }

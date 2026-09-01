@@ -31,4 +31,9 @@ export type VerifyResult = {
   success: boolean;
   recoveredAmount: number;
   notes: string;
+  checks?: {
+    eventValid: boolean;
+    amountMatch: boolean;
+    caseLinked: boolean;
+  };
 };

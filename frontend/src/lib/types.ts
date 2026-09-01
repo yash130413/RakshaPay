@@ -25,6 +25,12 @@ export type AuditLog = {
   eventType: string;
   message: string;
   createdAt: string;
+  metadata?: {
+    customerHistory?: {
+      successfulPayments?: number;
+      isLoyalCustomer?: boolean;
+    } | null;
+  } | null;
 };
 
 export type RecoveryCase = {
@@ -88,4 +94,9 @@ export type StatusFilter = "ALL" | "WAITING_FOR_WEBHOOK" | "RECOVERED" | "ESCALA
 
 export type DashboardTab = "overview" | "cases" | "audit" | "evaluation";
 
-export type DemoScenario = "recoverable" | "escalate" | "reject" | "full_recovery";
+export type DemoScenario =
+  | "recoverable"
+  | "escalate"
+  | "reject"
+  | "full_recovery"
+  | "abandoned";

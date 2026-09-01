@@ -32,6 +32,11 @@ const EVENT_META: Record<string, AuditEventMeta> = {
   "recovery.execution_failed": { icon: XCircle, label: "Execution failed", tone: "reject" },
   "recovery.failed": { icon: XCircle, label: "Recovery failed", tone: "reject" },
   "recovery.confirmed": { icon: CheckCircle2, label: "Recovery verified", tone: "recovery" },
+  "recovery.verification_failed": {
+    icon: AlertTriangle,
+    label: "Verification failed",
+    tone: "reject",
+  },
 };
 
 export function getAuditEventMeta(eventType: string): AuditEventMeta {

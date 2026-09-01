@@ -9,6 +9,11 @@ import { formatInr, formatTime } from "@/lib/format";
 import type { RecoveryCase } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 
+function getCustomerHistory(selected: RecoveryCase) {
+  const failed = selected.audits?.find((a) => a.eventType === "payment.failed");
+  return failed?.metadata?.customerHistory ?? null;
+}
+
 type CaseDetailContentProps = {
   selected: RecoveryCase;
   busy: boolean;
@@ -35,6 +40,23 @@ export function CaseDetailContent({
       </div>
 
       <AiSourceBadge decisions={selected.decisions} />
+
+      {(() => {
+        const history = getCustomerHistory(selected);
+        if (!history?.successfulPayments) return null;
+        return (
+          <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              Customer history
+            </p>
+            <p className="mt-1 text-sm text-foreground">
+              {history.successfulPayments} successful payment
+              {history.successfulPayments === 1 ? "" : "s"}
+              {history.isLoyalCustomer ? " · loyal customer" : ""}
+            </p>
+          </div>
+        );
+      })()}
 
       <div className="flex flex-wrap gap-1.5">
         {selected.status === "ESCALATED" && <Badge variant="escalate">Needs human</Badge>}

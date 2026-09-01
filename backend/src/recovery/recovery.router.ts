@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../db.js";
 import { writeAudit } from "../audit/audit.service.js";
+import { LOYAL_DEMO_EMAIL } from "../customers/customer.context.js";
 import { executeRecoveryAction } from "./recovery.executor.js";
 import { startRecoveryWorkflow } from "../workflows/recovery.workflow.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -52,6 +53,7 @@ recoveryRouter.get(
  *  - escalate:      ~₹30,000 → policy ESCALATE (human review threshold)
  *  - reject:        ~₹60,000 → policy REJECT (above max recovery amount)
  *  - full_recovery: recoverable + payment.captured verifier → RECOVERED
+ *  - abandoned:     ~₹999 checkout abandoned → payment link
  */
 recoveryRouter.post(
   "/demo/trigger",
@@ -60,12 +62,13 @@ recoveryRouter.post(
 
   const presets: Record<
     string,
-    { amountInr: number; failureReason: string; label: string }
+    { amountInr: number; failureReason: string; label: string; email?: string }
   > = {
     recoverable: {
       amountInr: 2499,
       failureReason: "insufficient funds",
-      label: "Standard recovery path",
+      label: "Standard recovery path (loyal customer → retry)",
+      email: LOYAL_DEMO_EMAIL,
     },
     escalate: {
       amountInr: 30000,
@@ -81,6 +84,12 @@ recoveryRouter.post(
       amountInr: 3499,
       failureReason: "insufficient funds",
       label: "Full loop: fail -> AI -> policy -> execute -> capture verify -> RECOVERED",
+      email: LOYAL_DEMO_EMAIL,
+    },
+    abandoned: {
+      amountInr: 999,
+      failureReason: "checkout abandoned by customer",
+      label: "Checkout abandoned → payment link",
     },
   };
 
@@ -101,6 +110,9 @@ recoveryRouter.post(
           status: "failed",
           method: "card",
           error_reason: preset.failureReason,
+          ...(preset.email
+            ? { email: preset.email, contact: "+919876543210" }
+            : {}),
         },
       },
     },

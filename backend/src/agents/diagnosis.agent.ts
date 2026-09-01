@@ -19,7 +19,9 @@ Analyze why a payment failed and return ONLY valid JSON matching this schema:
   "reason": "one sentence explanation"
 }
 
-Use diagnosis labels like: temporary_payment_failure, expired_payment_method, international_card_blocked, insufficient_funds, authentication_failed, generic_payment_failure.
+Use diagnosis labels like: temporary_payment_failure, expired_payment_method, international_card_blocked, insufficient_funds, checkout_abandoned, authentication_failed, generic_payment_failure.
+
+Use customer payment history (successfulPayments) in your reasoning — loyal customers with many past successes often have temporary failures.
 Do not recommend actions. Do not mention executing payments.`;
 
 export async function diagnoseFailure(input: {
@@ -27,6 +29,9 @@ export async function diagnoseFailure(input: {
   method?: string | null;
   previousAttempts?: number;
   amountInr?: number;
+  successfulPayments?: number;
+  avgAmountInr?: number;
+  isLoyalCustomer?: boolean;
 }): Promise<DiagnosisResult> {
   const llm = await generateStructuredJson({
     systemPrompt: SYSTEM_PROMPT,
@@ -36,6 +41,9 @@ export async function diagnoseFailure(input: {
         paymentMethod: input.method ?? "unknown",
         previousAttempts: input.previousAttempts ?? 0,
         amountInr: input.amountInr,
+        successfulPayments: input.successfulPayments ?? 0,
+        avgAmountInr: input.avgAmountInr ?? 0,
+        isLoyalCustomer: input.isLoyalCustomer ?? false,
       },
       null,
       2
@@ -54,5 +62,8 @@ export async function diagnoseFailure(input: {
     };
   }
 
-  return diagnoseFailureRules({ failureReason: input.failureReason });
+  return diagnoseFailureRules({
+    failureReason: input.failureReason,
+    successfulPayments: input.successfulPayments,
+  });
 }

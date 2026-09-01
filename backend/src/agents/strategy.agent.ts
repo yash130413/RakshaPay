@@ -19,9 +19,9 @@ Return ONLY valid JSON:
 }
 
 Guidelines:
-- RETRY_PAYMENT only for temporary failures with low attempt count
-- PAYMENT_LINK for method issues or moderate amounts
-- METHOD_UPDATE when card/UPI method must change
+- RETRY_PAYMENT for temporary failures when previousAttempts < 2, especially if successfulPayments >= 3
+- PAYMENT_LINK for checkout_abandoned or moderate amounts
+- METHOD_UPDATE when card/UPI method must change (expired/international)
 - HUMAN_ESCALATION for high amounts (>25000 INR) or exhausted retries
 - STOP when recovery is unlikely
 You only recommend — you never execute payments.`;
@@ -31,6 +31,7 @@ export async function chooseRecoveryStrategy(input: {
   amount: number;
   previousAttempts: number;
   successfulPayments: number;
+  isLoyalCustomer?: boolean;
   failureCategory?: string;
 }): Promise<StrategyResult> {
   const llm = await generateStructuredJson({
@@ -42,6 +43,7 @@ export async function chooseRecoveryStrategy(input: {
         amountInr: input.amount,
         previousAttempts: input.previousAttempts,
         successfulPayments: input.successfulPayments,
+        isLoyalCustomer: input.isLoyalCustomer ?? input.successfulPayments >= 3,
       },
       null,
       2

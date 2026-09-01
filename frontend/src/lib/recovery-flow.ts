@@ -14,6 +14,7 @@ export type FlowStep = {
 const POLICY_EVENTS = new Set(["policy.approved", "policy.escalated", "policy.rejected"]);
 const EXEC_EVENTS = new Set(["recovery.executed", "recovery.recommended"]);
 const VERIFY_EVENTS = new Set(["recovery.confirmed", "payment.captured"]);
+const VERIFY_FAIL_EVENTS = new Set(["recovery.verification_failed"]);
 
 function hasEvent(audits: { eventType: string }[] | undefined, events: string[]) {
   if (!audits?.length) return false;
@@ -25,6 +26,8 @@ export function buildRecoveryFlowSteps(recoveryCase: RecoveryCase): FlowStep[] {
   const audits = recoveryCase.audits ?? [];
   const status = recoveryCase.status;
   const policyBlocked = status === "ESCALATED" || status === "REJECTED";
+  const verificationFailed =
+    hasEvent(audits, [...VERIFY_FAIL_EVENTS]) && status !== "RECOVERED";
 
   const policyEvent = audits.find((a) => POLICY_EVENTS.has(a.eventType));
   const policyDetail =
@@ -65,7 +68,7 @@ export function buildRecoveryFlowSteps(recoveryCase: RecoveryCase): FlowStep[] {
       id: "diagnosed",
       label: "Diagnosed",
       state: "pending",
-      detail: recoveryCase.diagnosis ?? undefined,
+      detail: recoveryCase.diagnosis?.replace(/_/g, " ") ?? undefined,
     },
     {
       id: "policy",
@@ -90,12 +93,17 @@ export function buildRecoveryFlowSteps(recoveryCase: RecoveryCase): FlowStep[] {
       step.state = "blocked";
       return;
     }
+    if (key === "verified" && verificationFailed) {
+      step.state = "blocked";
+      step.detail = "Verification failed";
+      return;
+    }
     if (doneFlags[key]) {
       step.state = "done";
     }
   });
 
-  if (!policyBlocked) {
+  if (!policyBlocked && !verificationFailed) {
     const firstIncomplete = steps.findIndex((s) => s.state === "pending");
     if (firstIncomplete >= 0) {
       steps[firstIncomplete].state = "active";

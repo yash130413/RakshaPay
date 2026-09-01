@@ -40,8 +40,8 @@ export async function executeRecoveryAction(params: {
         action === "METHOD_UPDATE"
           ? `RazorRecover: update payment method & pay (case ${recoveryCaseId})`
           : action === "RETRY_PAYMENT"
-            ? `RazorRecover: retry failed payment (case ${recoveryCaseId})`
-            : `RazorRecover: recovery payment (case ${recoveryCaseId})`;
+            ? `RazorRecover: retry via recovery payment link (case ${recoveryCaseId})`
+            : `RazorRecover: recovery payment link (case ${recoveryCaseId})`;
 
       const link = await RazorpayService.createPaymentLink({
         amount: amountPaise,
@@ -64,11 +64,17 @@ export async function executeRecoveryAction(params: {
         razorpayRefId: linkId,
         shortUrl,
         status: "executed",
-        message: `Created Razorpay payment link ${linkId}${shortUrl ? `: ${shortUrl}` : ""}`,
+        message:
+          action === "RETRY_PAYMENT"
+            ? `Retry path: Razorpay recovery payment link ${linkId}${shortUrl ? `: ${shortUrl}` : ""}`
+            : action === "METHOD_UPDATE"
+              ? `Method update path: payment link ${linkId}${shortUrl ? `: ${shortUrl}` : ""}`
+              : `Created Razorpay payment link ${linkId}${shortUrl ? `: ${shortUrl}` : ""}`,
         metadata: {
           paymentLinkId: linkId,
           shortUrl,
           action,
+          executionMode: "razorpay_payment_link",
         },
       };
     }

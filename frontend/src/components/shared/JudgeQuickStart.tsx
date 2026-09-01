@@ -9,11 +9,16 @@ const JUDGE_STEPS = [
   },
   {
     step: "2",
+    title: "Customer history → smarter AI",
+    body: "Recoverable ₹2,499 uses loyal customer (8 pays) → retry strategy. Abandoned ₹999 → checkout_abandoned → payment link",
+  },
+  {
+    step: "3",
     title: "Policy cannot be bypassed",
     body: "Escalate ₹30,000 (human threshold) and Reject ₹60,000 (max amount) — model stops at policy gate",
   },
   {
-    step: "3",
+    step: "4",
     title: "Measured, not vibes",
     body: "Research tab: holdout n=885 — recovery 49.3% → 68.6%, unnecessary retries 1009 → 0",
   },
