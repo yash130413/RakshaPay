@@ -1,7 +1,6 @@
-# RazorRecover — System Architecture
+# RakshaPay — System Architecture
 
-**Track 03 · Razorpay AI Buildathon / AI Builder Internship**  
-**Product:** Autonomous AI revenue recovery agent for Razorpay merchants
+**Product:** Autonomous AI revenue recovery platform for merchants
 
 ---
 
@@ -115,7 +114,7 @@ RECEIVED
 | AI | Google Gemini (`gemini-3.6-flash`) | Free-tier capable; JSON mode; structured outputs |
 | Agent orchestration | Custom TS state machine | Controllable, explainable — no LangGraph dependency |
 | Evaluation | Python (planned / scaffold) | Synthetic dataset + baseline vs agent metrics |
-| Deploy (target) | Vercel (FE) + Render (API) + Neon (DB) | Simple internship demo hosting |
+| Deploy (target) | Vercel (FE) + Render (API) + Neon (DB) | Cloud deployment & hosting |
 
 **Explicitly out of scope for the sprint:** Kafka, Redis, Kubernetes, microservices, unrestricted LLM tool calling.
 

@@ -1,6 +1,6 @@
-# RazorRecover — Setup & Testing Guide
+# RakshaPay — Setup & Testing Guide
 
-Complete local setup for development and internship demos.
+Complete local setup for development and testing.
 
 ---
 

@@ -26,7 +26,7 @@ import type {
 } from "@/lib/types";
 
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
-const DEFAULT_MERCHANT_NAME = "Yash Rohilla";
+const DEFAULT_MERCHANT_NAME = "Merchant";
 
 type AuthUser = {
   id?: string;

@@ -1,7 +1,7 @@
-# RazorRecover — Product Overview
+# RakshaPay — Product Overview
 
-**Track:** 03 — AI-powered revenue recovery for Razorpay merchants  
-**Submission context:** Razorpay AI Buildathon / AI Builder Internship
+**Category:** AI-powered revenue recovery platform for merchants  
+**Focus:** Autonomous payment recovery & revenue protection
 
 ---
 
@@ -14,13 +14,13 @@ Merchants lose revenue when payments fail:
 - Blind retries waste gateway attempts and annoy customers
 - There is no closed loop from **failure → intelligent action → verified recovery → measured ₹**
 
-For a payments company like Razorpay, the interesting internship signal is not “I called an LLM” — it is **agents + payments + webhooks + policy + audit**.
+The key breakthrough is **agents + payments + webhooks + policy + audit**.
 
 ---
 
 ## Solution
 
-**RazorRecover** is an autonomous (bounded) revenue recovery agent:
+**RakshaPay** is an autonomous (bounded) revenue recovery agent:
 
 1. Listens to Razorpay **`payment.failed`** webhooks  
 2. Detects revenue at risk  
@@ -85,7 +85,7 @@ Evaluation scripts under `evaluation/` will compare **baseline (blind retry)** v
 
 ## Non-goals (honest scope)
 
-- Live Mode money movement in the internship demo  
+- Live Mode real production settlement without merchant consent  
 - Full subscription dunning suite (can be roadmap)  
 - Multi-tenant SaaS auth / billing  
 - Unrestricted multi-agent tool use without policy  

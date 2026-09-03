@@ -18,8 +18,8 @@ export function SubmissionBanner({ onOpenResearch }: SubmissionBannerProps) {
     <div className="overflow-hidden rounded-xl border border-brand/20 bg-gradient-to-br from-sky-50/80 via-card to-accent/30">
       <div className="border-b border-border/60 px-4 py-3 sm:px-5">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="brand">Razorpay AI Internship</Badge>
-          <Badge variant="outline">Track 03 · Revenue Recovery</Badge>
+          <Badge variant="brand">RakshaPay Platform</Badge>
+          <Badge variant="outline">AI Revenue Recovery</Badge>
         </div>
         <h2 className="mt-2 text-lg font-semibold tracking-tight text-foreground sm:text-xl">
           AI revenue recovery agent for merchants

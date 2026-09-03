@@ -1,6 +1,6 @@
-# RazorRecover Documentation Index
+# RakshaPay Documentation Index
 
-Professional documentation set for the Razorpay AI internship submission.
+Professional documentation set for the RakshaPay AI revenue recovery platform.
 
 | Document | Description |
 |----------|-------------|

@@ -6,7 +6,6 @@ import {
   ScrollText,
   TrendingUp,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { DashboardTab } from "@/lib/types";
 
@@ -39,14 +38,10 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
           Raksha<span className="text-recovery">Pay</span>
         </p>
         {!compact && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <Badge
-              variant="outline"
-              className="h-5 border-recovery/25 bg-recovery-muted/50 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-recovery-foreground"
-            >
-              Track 03
-            </Badge>
-            <span className="text-[11px] leading-none text-muted-foreground">AI recovery agent</span>
+          <div className="mt-1 flex items-center">
+            <span className="text-[11px] font-medium leading-none text-muted-foreground">
+              AI revenue recover
+            </span>
           </div>
         )}
       </div>

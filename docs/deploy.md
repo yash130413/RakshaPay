@@ -1,6 +1,6 @@
-# RazorRecover — Deploy Guide (Day 8–9)
+# RakshaPay — Deploy Guide
 
-Close the internship gap: **public live demo URL**.
+Production deployment guide for frontend & backend.
 
 ## Architecture (production)
 
@@ -68,7 +68,7 @@ VITE_API_URL=https://YOUR_RENDER_URL
 
 - Never commit `.env`
 - Rotate any keys that were pasted in chat / screenshots
-- Use Test Mode keys only for the internship demo
+- Use Test Mode API keys for sandbox verification
 
 ## 5. 5-minute pitch
 

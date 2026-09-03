@@ -1,8 +1,8 @@
 """
-Evaluate Baseline (blind retry) vs RazorRecover (rules + policy mirrored from backend).
+Evaluate Baseline (blind retry) vs RakshaPay (rules + policy mirrored from backend).
 
 Uses held-out synthetic failures and a latent ground-truth recovery model.
-Does NOT call Gemini/Razorpay — reproducible offline metrics for the internship report.
+Does NOT call external APIs — reproducible offline metrics for evaluation report.
 
 Usage:
   python generate_data.py

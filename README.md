@@ -1,8 +1,8 @@
-# RazorRecover
+# RakshaPay
 
-**Autonomous AI Revenue Recovery Agent for Razorpay Merchants**
+**Autonomous AI Revenue Recovery Platform for Merchants**
 
-Track 03 — Razorpay AI Buildathon / AI Builder Internship
+AI Revenue Recover Agent
 
 ## Core principle
 

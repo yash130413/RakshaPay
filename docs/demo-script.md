@@ -1,6 +1,5 @@
-# RazorRecover — 5-Minute Demo Script
+# RakshaPay — 5-Minute Demo Script
 
-**Audience:** Razorpay AI internship judges / engineers  
 **Goal:** Prove one closed-loop financial recovery agent — not a chatbot demo.  
 **Prefer:** Deployed Vercel + Render URLs ([deploy.md](./deploy.md)). Localhost is fine if cold-start is an issue.
 
@@ -8,9 +7,9 @@
 
 ## Positioning (15 seconds)
 
-> “RazorRecover is an AI revenue recovery agent for merchants.  
-> When a Razorpay payment fails, Gemini diagnoses and recommends an action.  
-> A **policy engine** gates every action. Razorpay Test Mode executes.  
+> “RakshaPay is an AI revenue recovery platform for merchants.  
+> When a payment fails, AI diagnoses and recommends an action.  
+> A **policy engine** gates every action. Razorpay executes.  
 > Webhooks verify. The dashboard proves rupees recovered.  
 > **AI decides. Policy controls. Razorpay executes. Webhooks verify.**”
 
@@ -92,4 +91,4 @@ Mention max retries / amount caps.
 - Demo triggers skip Razorpay signature so judges aren’t blocked by ngrok mid-pitch.  
 - Production path still verifies HMAC on `/webhooks/razorpay`.  
 - Evaluation is offline held-out simulation mirroring backend rules + policy.  
-- Internship demo uses **Test Mode** only.
+- Razorpay test mode / sandbox environment is used for verification.
