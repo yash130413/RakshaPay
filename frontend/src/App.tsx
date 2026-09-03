@@ -13,6 +13,7 @@ import { AuditView } from "@/components/views/AuditView";
 import { CasesView } from "@/components/views/CasesView";
 import { EvaluationView } from "@/components/views/EvaluationView";
 import { OverviewView } from "@/components/views/OverviewView";
+import { SettingsView } from "@/components/views/SettingsView";
 import { shortDate } from "@/lib/format";
 import type {
   AuditLog,
@@ -229,6 +230,8 @@ export default function App() {
         return <AuditView audits={audits} selectedCaseId={selectedId} />;
       case "evaluation":
         return <EvaluationView evaluation={evaluation} />;
+      case "settings":
+        return <SettingsView user={user} />;
     }
   }
 

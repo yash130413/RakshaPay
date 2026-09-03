@@ -92,7 +92,7 @@ export type ApiHealth = {
 
 export type StatusFilter = "ALL" | "WAITING_FOR_WEBHOOK" | "RECOVERED" | "ESCALATED" | "REJECTED";
 
-export type DashboardTab = "overview" | "cases" | "audit" | "evaluation";
+export type DashboardTab = "overview" | "cases" | "audit" | "evaluation" | "settings";
 
 export type DemoScenario =
   | "recoverable"

@@ -4,6 +4,7 @@ import {
   ClipboardList,
   LayoutDashboard,
   ScrollText,
+  Settings,
   TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,6 +15,7 @@ const NAV_ITEMS: { id: DashboardTab; label: string; icon: typeof LayoutDashboard
   { id: "cases", label: "Cases", icon: ClipboardList },
   { id: "audit", label: "Audit", icon: ScrollText },
   { id: "evaluation", label: "Research", icon: BarChart3 },
+  { id: "settings", label: "Settings", icon: Settings },
 ];
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
