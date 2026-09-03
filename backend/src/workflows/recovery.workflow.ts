@@ -49,8 +49,8 @@ export async function startRecoveryWorkflow(params: {
   const failureReason =
     paymentEntity?.error_reason ?? paymentEntity?.error_description ?? null;
 
-  const defaultEmail = process.env.MERCHANT_EMAIL || "yashrohilla1204@gmail.com";
-  const defaultName = process.env.MERCHANT_NAME || "Yash Rohilla";
+  const defaultEmail = process.env.MERCHANT_EMAIL || "demo@rakshapay.com";
+  const defaultName = process.env.MERCHANT_NAME || "Demo Merchant";
 
   const merchant = await prisma.merchant.upsert({
     where: { email: defaultEmail },

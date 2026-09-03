@@ -19,6 +19,12 @@ type LoginPageProps = {
 
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
+const DEMO_ACCESS = {
+  email: "demo@rakshapay.com",
+  password: "demo1234",
+  name: "Demo Merchant",
+};
+
 export function LoginPage({ onLogin }: LoginPageProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -102,6 +108,28 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               {authError}
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setEmail(DEMO_ACCESS.email);
+              setPassword(DEMO_ACCESS.password);
+              setAuthError(null);
+            }}
+            className="mb-4 w-full rounded-xl border border-recovery/25 bg-recovery-muted/40 px-3.5 py-3 text-left transition-colors hover:bg-recovery-muted/70"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-recovery">
+              Recruiter demo access
+            </p>
+            <p className="mt-1 text-xs text-foreground">
+              <span className="font-medium">{DEMO_ACCESS.email}</span>
+              <span className="text-muted-foreground"> · password </span>
+              <span className="font-mono font-medium">{DEMO_ACCESS.password}</span>
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Click to autofill, then sign in as {DEMO_ACCESS.name}
+            </p>
+          </button>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
