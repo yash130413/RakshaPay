@@ -1,70 +1,6 @@
+import { CheckCircle2, DollarSign, Percent, TrendingUp } from "lucide-react";
 import { formatInr } from "@/lib/format";
 import type { Summary } from "@/lib/types";
-import { cn } from "@/lib/utils";
-
-function HeroMetric({
-  label,
-  value,
-  tone = "default",
-  featured = false,
-}: {
-  label: string;
-  value: string;
-  tone?: "default" | "recovery" | "muted";
-  featured?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex flex-col justify-center rounded-xl border border-border bg-card px-5 py-4",
-        featured && "border-recovery/30 bg-gradient-to-br from-accent/80 to-card shadow-sm"
-      )}
-    >
-      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
-      <p
-        className={cn(
-          "mt-1 font-bold tabular-nums tracking-tight",
-          featured ? "text-3xl sm:text-4xl" : "text-2xl sm:text-3xl",
-          tone === "recovery" && "text-recovery",
-          tone === "muted" && "text-muted-foreground",
-          tone === "default" && "text-foreground"
-        )}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function StatPill({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string | number;
-  tone?: "recovery" | "escalate" | "reject" | "default";
-}) {
-  const valueClass =
-    tone === "recovery"
-      ? "text-recovery"
-      : tone === "escalate"
-        ? "text-escalate"
-        : tone === "reject"
-          ? "text-reject"
-          : "text-foreground";
-
-  return (
-    <div className="rounded-lg border border-border/80 bg-muted/30 px-3 py-2">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-      <p className={cn("mt-0.5 text-lg font-semibold tabular-nums", valueClass)}>{value}</p>
-    </div>
-  );
-}
 
 type HeroMetricsProps = {
   summary: Summary | null;
@@ -75,28 +11,113 @@ export function HeroMetrics({ summary }: HeroMetricsProps) {
   const aiActions = (summary?.actions ?? []).reduce((n, a) => n + a.count, 0);
 
   return (
-    <section className="space-y-3">
-      <div>
-        <h2 className="text-sm font-semibold text-foreground">Revenue at a glance</h2>
-        <p className="text-xs text-muted-foreground">Live metrics from your recovery ledger</p>
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-base font-bold tracking-tight text-foreground sm:text-lg">
+            Real-Time Revenue Performance
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Live telemetry from autonomous recovery pipelines & policy ledger
+          </p>
+        </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <HeroMetric label="At risk" value={formatInr(summary?.revenueAtRisk ?? 0)} />
-        <HeroMetric
-          label="Recovered"
-          value={formatInr(summary?.recovered ?? 0)}
-          tone="recovery"
-          featured
-        />
-        <HeroMetric label="Recovery rate" value={recoveryRate} tone="recovery" />
+      {/* Main 3 High-Impact Cards */}
+      <div className="grid gap-3.5 sm:grid-cols-3">
+        {/* At Risk Card */}
+        <div className="relative overflow-hidden rounded-xl border border-border/80 bg-gradient-to-br from-card via-card to-muted/30 p-4.5 shadow-sm transition-all hover:border-border">
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Revenue At Risk
+            </span>
+            <div className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <DollarSign className="size-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-foreground sm:text-3xl">
+            {formatInr(summary?.revenueAtRisk ?? 0)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Failed transaction inflow detected
+          </p>
+        </div>
+
+        {/* Recovered Card (Featured) */}
+        <div className="relative overflow-hidden rounded-xl border border-recovery/30 bg-gradient-to-br from-recovery-muted/60 via-card to-emerald-500/10 p-4.5 shadow-sm ring-1 ring-recovery/20 transition-all hover:shadow-md">
+          <div className="flex items-center justify-between text-recovery">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-recovery-foreground">
+              Total Recovered
+            </span>
+            <div className="flex size-8 items-center justify-center rounded-lg bg-recovery-muted text-recovery shadow-xs">
+              <TrendingUp className="size-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-recovery sm:text-3xl">
+            {formatInr(summary?.recovered ?? 0)}
+          </p>
+          <p className="mt-1 flex items-center gap-1 text-xs font-medium text-recovery-foreground">
+            <CheckCircle2 className="size-3.5 text-recovery" />
+            Verified captured funds
+          </p>
+        </div>
+
+        {/* Recovery Rate */}
+        <div className="relative overflow-hidden rounded-xl border border-border/80 bg-gradient-to-br from-card via-card to-muted/30 p-4.5 shadow-sm transition-all hover:border-border">
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Recovery Efficiency
+            </span>
+            <div className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <Percent className="size-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-bold tabular-nums tracking-tight text-foreground sm:text-3xl">
+            {recoveryRate}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Resolution rate across all active cases
+          </p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <StatPill label="Total cases" value={summary?.totalCases ?? 0} />
-        <StatPill label="Recovered" value={summary?.recoveredCases ?? 0} tone="recovery" />
-        <StatPill label="Escalated" value={summary?.escalatedCases ?? 0} tone="escalate" />
-        <StatPill label="AI actions" value={aiActions} />
+      {/* Secondary Stats Grid */}
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <div className="rounded-xl border border-border/70 bg-card/80 p-3 shadow-xs">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Total Cases
+          </p>
+          <p className="mt-0.5 text-lg font-bold tabular-nums text-foreground">
+            {summary?.totalCases ?? 0}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-recovery/20 bg-recovery-muted/30 p-3 shadow-xs">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-recovery-foreground">
+            Recovered Cases
+          </p>
+          <p className="mt-0.5 text-lg font-bold tabular-nums text-recovery">
+            {summary?.recoveredCases ?? 0}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-escalate/20 bg-escalate-muted/30 p-3 shadow-xs">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-escalate-foreground">
+            Escalated Cases
+          </p>
+          <p className="mt-0.5 text-lg font-bold tabular-nums text-escalate">
+            {summary?.escalatedCases ?? 0}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-brand/20 bg-brand/5 p-3 shadow-xs">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-brand">
+            AI Automated Actions
+          </p>
+          <p className="mt-0.5 text-lg font-bold tabular-nums text-foreground">
+            {aiActions}
+          </p>
+        </div>
       </div>
     </section>
   );

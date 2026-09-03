@@ -1,52 +1,59 @@
-import { PlayCircle } from "lucide-react";
+import { CheckCircle2, PlayCircle, ShieldAlert, Sparkles, UserCheck } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-const JUDGE_STEPS = [
+const RECOVERY_PATHS = [
   {
     step: "1",
-    title: "Full recovery loop",
-    body: "Run demo → Full recovery → open case drawer → show Failed → Diagnosed → Policy → Executed → Recovered",
+    title: "Autonomous Recovery Loop",
+    body: "Payment fails → AI diagnoses root cause → Policy checks pass → Recovery link generated → Instant capture.",
+    icon: Sparkles,
   },
   {
     step: "2",
-    title: "Customer history → smarter AI",
-    body: "Recoverable ₹2,499 uses loyal customer (8 pays) → retry strategy. Abandoned ₹999 → checkout_abandoned → payment link",
+    title: "Customer Intelligence & Loyalty",
+    body: "Accounts with verified successful payment history receive priority routing and tailored recovery channels.",
+    icon: UserCheck,
   },
   {
     step: "3",
-    title: "Policy cannot be bypassed",
-    body: "Escalate ₹30,000 (human threshold) and Reject ₹60,000 (max amount) — model stops at policy gate",
+    title: "Hard Policy Guardrails",
+    body: "High-value transactions trigger automated human escalation gates; suspicious amounts are strictly rejected.",
+    icon: ShieldAlert,
   },
   {
     step: "4",
-    title: "Measured, not vibes",
-    body: "Research tab: holdout n=885 — recovery 49.3% → 68.6%, unnecessary retries 1009 → 0",
+    title: "Empirical Performance & Accuracy",
+    body: "Demonstrated 49.3% → 68.6% recovery rate improvement with zero unnecessary retry attempts.",
+    icon: CheckCircle2,
   },
 ];
 
 export function JudgeQuickStart() {
   return (
-    <Card className="border-recovery/20">
-      <CardHeader className="pb-2">
+    <Card className="border-border/80 shadow-sm transition-all hover:border-border">
+      <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
         <div className="flex items-center gap-2">
           <PlayCircle className="size-4 text-recovery" />
-          <CardTitle className="text-base">5-minute demo path</CardTitle>
+          <CardTitle className="text-base font-bold">Autonomous Recovery Lifecycle</CardTitle>
         </div>
-        <CardDescription>For judges — matches docs/demo-script.md</CardDescription>
+        <CardDescription>Core execution architecture & policy verification paths</CardDescription>
       </CardHeader>
-      <CardContent>
-        <ol className="space-y-3">
-          {JUDGE_STEPS.map((s) => (
-            <li key={s.step} className="flex gap-3">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-recovery-muted text-[11px] font-bold text-recovery-foreground">
-                {s.step}
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-foreground">{s.title}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">{s.body}</p>
-              </div>
-            </li>
-          ))}
+      <CardContent className="pt-4">
+        <ol className="space-y-3.5">
+          {RECOVERY_PATHS.map((s) => {
+            const Icon = s.icon;
+            return (
+              <li key={s.step} className="flex items-start gap-3 rounded-lg border border-border/40 bg-card/60 p-2.5 transition-all hover:bg-muted/30">
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-recovery-muted text-recovery shadow-xs">
+                  <Icon className="size-3.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-foreground">{s.title}</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{s.body}</p>
+                </div>
+              </li>
+            );
+          })}
         </ol>
       </CardContent>
     </Card>

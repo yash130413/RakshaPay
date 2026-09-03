@@ -11,8 +11,8 @@ export function AgentMixCard({ mix }: AgentMixCardProps) {
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">AI source mix</CardTitle>
-          <CardDescription>Gemini vs rules fallback on live cases</CardDescription>
+        <CardTitle className="text-base">AI Decision Engine</CardTitle>
+        <CardDescription>Advanced LLM vs rules fallback on live cases</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
@@ -26,9 +26,9 @@ export function AgentMixCard({ mix }: AgentMixCardProps) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">AI source mix</CardTitle>
+        <CardTitle className="text-base">AI Decision Engine</CardTitle>
         <CardDescription>
-          Live ledger · {mix.total} cases · Gemini when API available, rules on fallback
+          Live ledger · {mix.total} cases · AI model when API available, rules on fallback
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -36,7 +36,7 @@ export function AgentMixCard({ mix }: AgentMixCardProps) {
           <div
             className="bg-gemini transition-all"
             style={{ width: `${mix.geminiPct}%` }}
-            title={`Gemini ${mix.geminiPct}%`}
+            title={`AI Model ${mix.geminiPct}%`}
           />
           <div
             className="bg-rules transition-all"
@@ -47,7 +47,7 @@ export function AgentMixCard({ mix }: AgentMixCardProps) {
         <div className="grid grid-cols-2 gap-3">
           <MixStat
             icon={Sparkles}
-            label="Gemini"
+            label="AI Model"
             count={mix.gemini}
             pct={mix.geminiPct}
             tone="gemini"

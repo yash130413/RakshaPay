@@ -11,10 +11,10 @@ export function PolicyLimitsCard() {
       <CardHeader className="pb-2">
         <div className="flex items-center gap-2">
           <Shield className="size-4 text-escalate" />
-          <CardTitle className="text-base">Policy engine (demo merchant)</CardTitle>
+          <CardTitle className="text-base">Merchant Policy Guardrails</CardTitle>
         </div>
         <CardDescription>
-          The LLM cannot bypass these gates — try Escalate / Reject demos
+          Hard deterministic limits — safety & compliance gates protecting transaction flows
         </CardDescription>
       </CardHeader>
       <CardContent>
