@@ -1,5 +1,4 @@
 import { ArrowRight, Shield, Sparkles, Webhook, Zap } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 const STEPS = [
@@ -17,11 +16,7 @@ export function SubmissionBanner({ onOpenResearch }: SubmissionBannerProps) {
   return (
     <div className="overflow-hidden rounded-xl border border-brand/20 bg-gradient-to-br from-sky-50/80 via-card to-accent/30 shadow-sm">
       <div className="border-b border-border/60 px-4 py-4 sm:px-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="brand">RakshaPay</Badge>
-          <Badge variant="outline">AI Revenue Recovery</Badge>
-        </div>
-        <h2 className="mt-2 text-lg font-bold tracking-tight text-foreground sm:text-xl">
+        <h2 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">
           AI revenue recovery agent for merchants
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground text-balance">

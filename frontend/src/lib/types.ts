@@ -17,6 +17,7 @@ export type Decision = {
   recommendedAction: string | null;
   reason: string | null;
   rawJson: { source?: string } | null;
+  createdAt?: string;
 };
 
 export type AuditLog = {
@@ -33,24 +34,73 @@ export type AuditLog = {
   } | null;
 };
 
+export type CaseCustomer = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  successfulPayments?: number;
+  avgAmount?: number;
+};
+
+export type CasePayment = {
+  id: string;
+  razorpayPaymentId: string | null;
+  amount: number;
+  currency: string;
+  status: string;
+  method: string | null;
+  failureReason: string | null;
+};
+
+export type CaseAction = {
+  actionType: string;
+  status: string;
+  policyDecision?: string;
+  razorpayRefId: string | null;
+  createdAt?: string;
+  metadata: {
+    shortUrl?: string;
+    message?: string;
+    paymentLinkId?: string;
+    executionMode?: string;
+  } | null;
+};
+
+export type CaseResult = {
+  success: boolean;
+  recoveredAmount: number;
+  verifiedAt?: string;
+  notes?: string | null;
+};
+
 export type RecoveryCase = {
   id: string;
+  merchantId?: string;
+  customerId?: string | null;
+  paymentId?: string | null;
   amount: number;
+  currency?: string;
   status: string;
   failureReason: string | null;
   diagnosis: string | null;
+  diagnosisConfidence?: number | null;
   recommendedAction: string | null;
   expectedRecoveryProbability: number | null;
   recoveredAmount: number;
+  attemptCount?: number;
+  assignedTo?: string | null;
+  assignedToRole?: string | null;
+  assignedAt?: string | null;
+  assignmentMode?: string | null;
+  reviewNotes?: string | null;
   createdAt: string;
+  updatedAt?: string;
+  customer?: CaseCustomer | null;
+  payment?: CasePayment | null;
   decisions?: Decision[];
-  actions: {
-    actionType: string;
-    status: string;
-    policyDecision?: string;
-    razorpayRefId: string | null;
-    metadata: { shortUrl?: string; message?: string } | null;
-  }[];
+  actions: CaseAction[];
+  results?: CaseResult[];
   audits?: AuditLog[];
 };
 
@@ -92,7 +142,7 @@ export type ApiHealth = {
 
 export type StatusFilter = "ALL" | "WAITING_FOR_WEBHOOK" | "RECOVERED" | "ESCALATED" | "REJECTED";
 
-export type DashboardTab = "overview" | "cases" | "audit" | "evaluation" | "settings";
+export type DashboardTab = "overview" | "cases" | "review" | "audit" | "evaluation" | "settings";
 
 export type DemoScenario =
   | "recoverable"

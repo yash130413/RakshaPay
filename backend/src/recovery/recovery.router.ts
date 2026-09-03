@@ -17,7 +17,10 @@ recoveryRouter.get(
     include: {
       actions: true,
       decisions: { orderBy: { createdAt: "asc" } },
-      audits: { orderBy: { createdAt: "asc" }, take: 30 },
+      audits: { orderBy: { createdAt: "asc" }, take: 50 },
+      results: true,
+      customer: true,
+      payment: true,
     },
   });
   res.json(cases);
@@ -35,6 +38,8 @@ recoveryRouter.get(
       actions: true,
       results: true,
       audits: { orderBy: { createdAt: "asc" } },
+      customer: true,
+      payment: true,
     },
   });
 
@@ -344,6 +349,239 @@ recoveryRouter.post(
   });
 
   return res.json({ ok: true, recoveredAmount: recoveryCase.amount / 100 });
+  })
+);
+
+const DEMO_REVIEWERS = [
+  { id: "collections", name: "Priya Sharma", role: "Collections" },
+  { id: "risk", name: "Arjun Mehta", role: "Risk ops" },
+] as const;
+
+const caseInclude = {
+  actions: true,
+  decisions: { orderBy: { createdAt: "asc" as const } },
+  audits: { orderBy: { createdAt: "asc" as const } },
+  results: true,
+  customer: true,
+  payment: true,
+};
+
+recoveryRouter.get(
+  "/reviewers",
+  asyncHandler(async (_req, res) => {
+    res.json({ reviewers: DEMO_REVIEWERS });
+  })
+);
+
+recoveryRouter.post(
+  "/cases/:id/assign",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const mode = String(req.body?.mode ?? "").toUpperCase();
+    const assignedTo = String(req.body?.assignedTo ?? "").trim();
+    const assignedToRole = String(req.body?.assignedToRole ?? "").trim() || null;
+
+    if (mode !== "SELF" && mode !== "MANUAL") {
+      return res.status(400).json({ error: "mode must be SELF or MANUAL" });
+    }
+    if (!assignedTo) {
+      return res.status(400).json({ error: "assignedTo is required" });
+    }
+
+    const recoveryCase = await prisma.recoveryCase.findUnique({ where: { id } });
+    if (!recoveryCase) return res.status(404).json({ error: "Not found" });
+    if (recoveryCase.status !== "ESCALATED") {
+      return res.status(400).json({ error: "Only escalated cases can be assigned" });
+    }
+
+    await prisma.recoveryCase.update({
+      where: { id },
+      data: {
+        assignedTo,
+        assignedToRole,
+        assignedAt: new Date(),
+        assignmentMode: mode,
+      },
+    });
+
+    await writeAudit({
+      recoveryCaseId: id,
+      eventType: "review.assigned",
+      message:
+        mode === "SELF"
+          ? `Merchant self-assigned review to ${assignedTo}`
+          : `Manually assigned to ${assignedTo}${assignedToRole ? ` (${assignedToRole})` : ""}`,
+      metadata: { mode, assignedTo, assignedToRole },
+    });
+
+    const updated = await prisma.recoveryCase.findUnique({
+      where: { id },
+      include: caseInclude,
+    });
+    return res.json({ ok: true, case: updated });
+  })
+);
+
+recoveryRouter.post(
+  "/cases/:id/review",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const action = String(req.body?.action ?? "").toLowerCase();
+    const notes = String(req.body?.notes ?? "").trim();
+    const reviewedBy = String(req.body?.reviewedBy ?? "").trim() || "Merchant";
+
+    if (!["approve", "reject", "request_info"].includes(action)) {
+      return res.status(400).json({ error: "action must be approve, reject, or request_info" });
+    }
+
+    const recoveryCase = await prisma.recoveryCase.findUnique({
+      where: { id },
+      include: { customer: true, payment: true },
+    });
+    if (!recoveryCase) return res.status(404).json({ error: "Not found" });
+    if (recoveryCase.status !== "ESCALATED") {
+      return res.status(400).json({ error: "Only escalated cases can be reviewed" });
+    }
+    if (!recoveryCase.assignedTo) {
+      return res.status(400).json({ error: "Assign a reviewer before taking review actions" });
+    }
+
+    if (action === "request_info") {
+      if (!notes) {
+        return res.status(400).json({ error: "Notes are required when requesting more info" });
+      }
+      await prisma.recoveryCase.update({
+        where: { id },
+        data: { reviewNotes: notes },
+      });
+      await writeAudit({
+        recoveryCaseId: id,
+        eventType: "review.info_requested",
+        message: `${reviewedBy} requested more info: ${notes}`,
+        metadata: { reviewedBy, notes },
+      });
+      const updated = await prisma.recoveryCase.findUnique({
+        where: { id },
+        include: caseInclude,
+      });
+      return res.json({ ok: true, action, case: updated });
+    }
+
+    if (action === "reject") {
+      await prisma.recoveryCase.update({
+        where: { id },
+        data: {
+          status: "REJECTED",
+          reviewNotes: notes || recoveryCase.reviewNotes,
+        },
+      });
+      await prisma.recoveryAction.create({
+        data: {
+          recoveryCaseId: id,
+          actionType: "STOP",
+          policyDecision: "REJECTED",
+          status: "human_rejected",
+          metadata: { reviewedBy, notes },
+        },
+      });
+      await writeAudit({
+        recoveryCaseId: id,
+        eventType: "review.rejected",
+        message: `${reviewedBy} rejected recovery${notes ? `: ${notes}` : ""}`,
+        metadata: { reviewedBy, notes },
+      });
+      const updated = await prisma.recoveryCase.findUnique({
+        where: { id },
+        include: caseInclude,
+      });
+      return res.json({ ok: true, action, case: updated });
+    }
+
+    const execAction =
+      recoveryCase.recommendedAction &&
+      recoveryCase.recommendedAction !== "STOP" &&
+      recoveryCase.recommendedAction !== "HUMAN_ESCALATION"
+        ? recoveryCase.recommendedAction
+        : "PAYMENT_LINK";
+
+    const execution = await executeRecoveryAction({
+      recoveryCaseId: recoveryCase.id,
+      action: execAction,
+      amountPaise: recoveryCase.amount,
+      currency: recoveryCase.currency,
+      customer: {
+        name: recoveryCase.customer?.name ?? undefined,
+        email: recoveryCase.customer?.email ?? undefined,
+        contact: recoveryCase.customer?.phone ?? undefined,
+      },
+    });
+
+    await prisma.recoveryAction.create({
+      data: {
+        recoveryCaseId: recoveryCase.id,
+        actionType: execAction,
+        policyDecision: "APPROVED",
+        status: execution.status,
+        razorpayRefId: execution.razorpayRefId,
+        metadata: {
+          message: execution.message,
+          shortUrl: execution.shortUrl,
+          humanOverride: true,
+          reviewedBy,
+          notes,
+          ...(execution.metadata ?? {}),
+        },
+      },
+    });
+
+    if (execution.ok) {
+      await prisma.recoveryCase.update({
+        where: { id },
+        data: {
+          status: "WAITING_FOR_WEBHOOK",
+          attemptCount: { increment: 1 },
+          reviewNotes: notes || recoveryCase.reviewNotes,
+        },
+      });
+      await writeAudit({
+        recoveryCaseId: id,
+        eventType: "review.approved",
+        message: `${reviewedBy} approved human override and executed ${execAction}${notes ? `: ${notes}` : ""}`,
+        metadata: {
+          reviewedBy,
+          notes,
+          execAction,
+          razorpayRefId: execution.razorpayRefId,
+          shortUrl: execution.shortUrl,
+        },
+      });
+      await writeAudit({
+        recoveryCaseId: id,
+        eventType: "recovery.executed",
+        message: execution.message,
+        metadata: {
+          razorpayRefId: execution.razorpayRefId,
+          shortUrl: execution.shortUrl,
+        },
+      });
+    } else {
+      await prisma.recoveryCase.update({
+        where: { id },
+        data: { status: "FAILED", reviewNotes: notes || recoveryCase.reviewNotes },
+      });
+      await writeAudit({
+        recoveryCaseId: id,
+        eventType: "recovery.execution_failed",
+        message: execution.message,
+        metadata: { reviewedBy },
+      });
+    }
+
+    const updated = await prisma.recoveryCase.findUnique({
+      where: { id },
+      include: caseInclude,
+    });
+    return res.json({ ok: execution.ok, action, execution, case: updated });
   })
 );
 

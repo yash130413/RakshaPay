@@ -6,6 +6,7 @@ import {
   ScrollText,
   Settings,
   TrendingUp,
+  UserCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DashboardTab } from "@/lib/types";
@@ -13,6 +14,7 @@ import type { DashboardTab } from "@/lib/types";
 const NAV_ITEMS: { id: DashboardTab; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
   { id: "cases", label: "Cases", icon: ClipboardList },
+  { id: "review", label: "Review", icon: UserCheck },
   { id: "audit", label: "Audit", icon: ScrollText },
   { id: "evaluation", label: "Research", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },

@@ -16,6 +16,17 @@ export function formatTime(iso: string) {
   });
 }
 
+export function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 export function shortDate(isoDate: string) {
   const d = new Date(isoDate + "T00:00:00");
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });

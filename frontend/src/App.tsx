@@ -13,6 +13,7 @@ import { AuditView } from "@/components/views/AuditView";
 import { CasesView } from "@/components/views/CasesView";
 import { EvaluationView } from "@/components/views/EvaluationView";
 import { OverviewView } from "@/components/views/OverviewView";
+import { ReviewView } from "@/components/views/ReviewView";
 import { SettingsView } from "@/components/views/SettingsView";
 import { shortDate } from "@/lib/format";
 import type {
@@ -58,6 +59,7 @@ export default function App() {
   const [filter, setFilter] = useState<StatusFilter>("ALL");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [demoBusy, setDemoBusy] = useState(false);
   const { toasts, show: showToast, dismiss: dismissToast } = useToast();
 
   const load = useCallback((isPoll = false) => {
@@ -138,7 +140,7 @@ export default function App() {
   const backendOnline = !error;
 
   async function triggerDemo(scenario: DemoScenario) {
-    setBusy(true);
+    setDemoBusy(true);
     try {
       const res = await fetch(`${API}/api/recovery/demo/trigger`, {
         method: "POST",
@@ -156,7 +158,7 @@ export default function App() {
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Demo failed", "error");
     } finally {
-      setBusy(false);
+      setDemoBusy(false);
     }
   }
 
@@ -172,6 +174,55 @@ export default function App() {
       load(true);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Capture failed", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function assignReview(
+    caseId: string,
+    payload: { mode: "SELF" | "MANUAL"; assignedTo: string; assignedToRole: string }
+  ) {
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/api/recovery/cases/${caseId}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Assign failed");
+      showToast(`Assigned to ${payload.assignedTo}`, "success");
+      load(true);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Assign failed", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reviewCase(
+    caseId: string,
+    payload: { action: "approve" | "reject" | "request_info"; notes: string; reviewedBy: string }
+  ) {
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/api/recovery/cases/${caseId}/review`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Review failed");
+      const labels = {
+        approve: "Approved — recovery executed",
+        reject: "Rejected — recovery stopped",
+        request_info: "More info requested",
+      };
+      showToast(labels[payload.action], payload.action === "reject" ? "error" : "success");
+      load(true);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Review failed", "error");
     } finally {
       setBusy(false);
     }
@@ -226,6 +277,16 @@ export default function App() {
             onSimulateCapture={simulateCapture}
           />
         );
+      case "review":
+        return (
+          <ReviewView
+            cases={cases}
+            busy={busy}
+            merchantName={user?.name || user?.merchantName || DEFAULT_MERCHANT_NAME}
+            onAssign={assignReview}
+            onReview={reviewCase}
+          />
+        );
       case "audit":
         return <AuditView audits={audits} selectedCaseId={selectedId} />;
       case "evaluation":
@@ -243,7 +304,7 @@ export default function App() {
         merchantName={user.merchantName || DEFAULT_MERCHANT_NAME}
         backendOnline={backendOnline}
         refreshing={refreshing}
-        busy={busy}
+        busy={demoBusy}
         onRunDemo={triggerDemo}
         user={user}
         onLogout={handleLogout}
