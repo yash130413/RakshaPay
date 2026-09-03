@@ -5,46 +5,55 @@ const RECOVERY_PATHS = [
   {
     step: "1",
     title: "Autonomous Recovery Loop",
-    body: "Payment fails → AI diagnoses root cause → Policy checks pass → Recovery link generated → Instant capture.",
+    body: "Payment fails → AI diagnoses → Policy checks → Recovery link → Capture verified.",
     icon: Sparkles,
   },
   {
     step: "2",
-    title: "Customer Intelligence & Loyalty",
-    body: "Accounts with verified successful payment history receive priority routing and tailored recovery channels.",
+    title: "Customer Intelligence",
+    body: "Loyal payment history gets priority routing and tailored recovery channels.",
     icon: UserCheck,
   },
   {
     step: "3",
     title: "Hard Policy Guardrails",
-    body: "High-value transactions trigger automated human escalation gates; suspicious amounts are strictly rejected.",
+    body: "High-value amounts escalate to humans; over-limit amounts are rejected.",
     icon: ShieldAlert,
   },
   {
     step: "4",
-    title: "Empirical Performance & Accuracy",
-    body: "Demonstrated 49.3% → 68.6% recovery rate improvement with zero unnecessary retry attempts.",
+    title: "Measured Performance",
+    body: "Holdout eval: 49.3% → 68.6% recovery, with zero unnecessary retries.",
     icon: CheckCircle2,
   },
 ];
 
 export function JudgeQuickStart() {
   return (
-    <Card className="border-border/80 shadow-sm transition-all hover:border-border">
-      <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
+    <Card className="overflow-hidden border-border/80 shadow-sm">
+      <CardHeader className="border-b border-border/40 bg-muted/20 pb-3">
         <div className="flex items-center gap-2">
-          <PlayCircle className="size-4 text-recovery" />
-          <CardTitle className="text-base font-bold">Autonomous Recovery Lifecycle</CardTitle>
+          <div className="flex size-8 items-center justify-center rounded-lg bg-recovery-muted text-recovery">
+            <PlayCircle className="size-4" />
+          </div>
+          <div>
+            <CardTitle className="text-base font-bold">Autonomous Recovery Lifecycle</CardTitle>
+            <CardDescription className="text-xs">
+              Core execution path from fail to recover
+            </CardDescription>
+          </div>
         </div>
-        <CardDescription>Core execution architecture & policy verification paths</CardDescription>
       </CardHeader>
       <CardContent className="pt-4">
-        <ol className="space-y-3.5">
+        <ol className="space-y-2.5">
           {RECOVERY_PATHS.map((s) => {
             const Icon = s.icon;
             return (
-              <li key={s.step} className="flex items-start gap-3 rounded-lg border border-border/40 bg-card/60 p-2.5 transition-all hover:bg-muted/30">
-                <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-recovery-muted text-recovery shadow-xs">
+              <li
+                key={s.step}
+                className="flex items-start gap-3 rounded-xl border border-border/50 bg-card/70 p-2.5 transition-colors hover:bg-muted/30"
+              >
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-recovery-muted text-recovery">
                   <Icon className="size-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">

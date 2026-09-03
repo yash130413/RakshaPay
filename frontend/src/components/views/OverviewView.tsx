@@ -14,12 +14,11 @@ import { AgentMixCard } from "@/components/shared/AgentMixCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { HeroMetrics } from "@/components/shared/HeroMetrics";
 import { JudgeQuickStart } from "@/components/shared/JudgeQuickStart";
-import { PolicyLimitsCard } from "@/components/shared/PolicyLimitsCard";
 import { SubmissionBanner } from "@/components/shared/SubmissionBanner";
 import { formatInr } from "@/lib/format";
 import { computeAgentMix } from "@/lib/submission";
 import type { RecoveryCase, SeriesPoint, Summary } from "@/lib/types";
-import { LineChart, Sparkles } from "lucide-react";
+import { LineChart } from "lucide-react";
 
 type OverviewViewProps = {
   summary: Summary | null;
@@ -37,35 +36,39 @@ export function OverviewView({
   const agentMix = computeAgentMix(cases);
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner */}
+    <div className="space-y-5">
+      {/* 1. RakshaPay platform banner */}
       <SubmissionBanner onOpenResearch={onOpenResearch} />
 
-      {/* KPI Metrics */}
+      {/* 2. Real-time revenue performance */}
       <HeroMetrics summary={summary} />
 
-      {/* Main Cumulative Recovery Trajectory Chart */}
-      <Card className="border-border/80 shadow-sm transition-all hover:border-border">
+      {/* 3. Revenue recovery trajectory */}
+      <Card className="overflow-hidden border-border/80 shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 bg-muted/20 pb-3">
           <div>
             <div className="flex items-center gap-2">
-              <LineChart className="size-4 text-recovery" />
-              <CardTitle className="text-base font-bold">Revenue Recovery Trajectory</CardTitle>
+              <div className="flex size-8 items-center justify-center rounded-lg bg-recovery-muted text-recovery">
+                <LineChart className="size-4" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-bold">Revenue Recovery Trajectory</CardTitle>
+                <CardDescription className="text-xs">
+                  Cumulative at-risk inflow vs recovered INR
+                </CardDescription>
+              </div>
             </div>
-            <CardDescription className="text-xs">
-              Live cumulative at-risk inflow vs autonomous recovered INR
-            </CardDescription>
           </div>
           <Badge variant="outline" className="border-border bg-card text-xs font-semibold">
-            Live Ledger Feed
+            Live ledger
           </Badge>
         </CardHeader>
         <CardContent className="pt-4">
           {chartData.length === 0 ? (
-            <div className="py-8">
+            <div className="py-10">
               <EmptyState
                 title="No recovery data yet"
-                body="Trigger a test recovery scenario from the top bar to watch the ledger populate in real time."
+                body="Run a demo from the top bar — the chart fills as cases arrive."
               />
             </div>
           ) : (
@@ -107,10 +110,7 @@ export function OverviewView({
                       fontSize: 12,
                     }}
                   />
-                  <Legend
-                    wrapperStyle={{ paddingTop: 10, fontSize: 12 }}
-                    iconType="circle"
-                  />
+                  <Legend wrapperStyle={{ paddingTop: 10, fontSize: 12 }} iconType="circle" />
                   <Area
                     type="monotone"
                     dataKey="cumulativeFailedInr"
@@ -134,53 +134,11 @@ export function OverviewView({
         </CardContent>
       </Card>
 
-      {/* Grid: AI Mix + Recovery Paths */}
+      {/* 4 + 5. AI Decision Engine + Autonomous Recovery Lifecycle */}
       <div className="grid gap-4 lg:grid-cols-2">
         <AgentMixCard mix={agentMix} />
         <JudgeQuickStart />
       </div>
-
-      {/* Merchant Policy Limits */}
-      <PolicyLimitsCard />
-
-      {/* Automated Actions Breakdown */}
-      <Card className="border-border/80 shadow-sm">
-        <CardHeader className="pb-3 border-b border-border/40 bg-muted/20">
-          <div className="flex items-center gap-2">
-            <Sparkles className="size-4 text-recovery" />
-            <CardTitle className="text-base font-bold">Autonomous Recovery Actions Triggered</CardTitle>
-          </div>
-          <CardDescription className="text-xs">
-            Dynamic distribution of AI diagnosis-driven recovery mechanisms
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-4">
-          {(summary?.actions?.length ?? 0) === 0 ? (
-            <div className="py-4">
-              <EmptyState
-                title="No AI actions yet"
-                body="Execute a scenario to view automated payment links, retries, and customer follow-up actions."
-              />
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4">
-              {summary!.actions.map((a) => (
-                <div
-                  key={a.actionType}
-                  className="flex items-center justify-between rounded-xl border border-border/70 bg-card p-3 shadow-xs transition-all hover:border-border"
-                >
-                  <span className="truncate text-xs font-semibold text-foreground uppercase tracking-wider">
-                    {a.actionType.replace(/_/g, " ")}
-                  </span>
-                  <Badge variant="recovery" className="font-mono text-xs font-bold">
-                    {a.count}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
