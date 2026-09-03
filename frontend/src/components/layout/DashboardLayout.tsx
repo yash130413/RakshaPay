@@ -1,17 +1,18 @@
 import type { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
-import type { ApiHealth, DashboardTab, DemoScenario } from "@/lib/types";
+import type { DashboardTab, DemoScenario } from "@/lib/types";
 
 type DashboardLayoutProps = {
   activeTab: DashboardTab;
   onTabChange: (tab: DashboardTab) => void;
   merchantName: string;
   backendOnline: boolean;
-  health: ApiHealth | null;
   refreshing?: boolean;
   busy: boolean;
   onRunDemo: (scenario: DemoScenario) => void;
+  user?: { email: string; name: string; merchantName?: string } | null;
+  onLogout?: () => void;
   children: ReactNode;
 };
 
@@ -20,10 +21,11 @@ export function DashboardLayout({
   onTabChange,
   merchantName,
   backendOnline,
-  health,
   refreshing = false,
   busy,
   onRunDemo,
+  user,
+  onLogout,
   children,
 }: DashboardLayoutProps) {
   return (
@@ -33,15 +35,13 @@ export function DashboardLayout({
         <TopBar
           merchantName={merchantName}
           backendOnline={backendOnline}
-          health={health}
           refreshing={refreshing}
           busy={busy}
           onRunDemo={onRunDemo}
+          user={user}
+          onLogout={onLogout}
         />
         <main className="flex-1 overflow-y-auto px-4 py-6 md:px-6">{children}</main>
-        <footer className="shrink-0 border-t border-border bg-card/50 px-4 py-3 text-center text-[11px] text-muted-foreground md:px-6">
-          Razorpay Test Mode · AI decides. Policy controls. Razorpay executes. Webhooks verify.
-        </footer>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import {
+  ArrowRight,
   BarChart3,
   ClipboardList,
   LayoutDashboard,
@@ -35,7 +36,7 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
             compact ? "text-sm leading-none" : "text-[17px] leading-tight"
           )}
         >
-          Razor<span className="text-recovery">Recover</span>
+          Raksha<span className="text-recovery">Pay</span>
         </p>
         {!compact && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -102,18 +103,25 @@ export function Sidebar({ active, onChange }: SidebarProps) {
           })}
         </nav>
 
-        <div className="shrink-0 border-t border-border bg-muted/30 px-4 py-3.5">
-          <div className="flex items-center gap-2">
-            <span className="relative flex size-2">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-recovery opacity-40" />
-              <span className="relative inline-flex size-2 rounded-full bg-recovery" />
-            </span>
-            <p className="text-xs font-medium text-foreground">Razorpay Test Mode</p>
+        {active !== "evaluation" && (
+          <div className="shrink-0 border-t border-border p-3">
+            <button
+              type="button"
+              onClick={() => onChange("evaluation")}
+              className="group flex w-full items-center justify-between rounded-lg border border-recovery/20 bg-accent/40 px-3 py-2.5 text-left transition-colors hover:bg-accent/70"
+            >
+              <span>
+                <span className="block text-xs font-semibold text-recovery-foreground">
+                  Held-out eval
+                </span>
+                <span className="block text-[10px] text-muted-foreground">
+                  49.3% → 68.6% recovery
+                </span>
+              </span>
+              <ArrowRight className="size-3.5 shrink-0 text-recovery transition-transform group-hover:translate-x-0.5" />
+            </button>
           </div>
-          <p className="mt-1 pl-4 text-[10px] leading-relaxed text-muted-foreground">
-            AI decides · Policy controls · Razorpay executes
-          </p>
-        </div>
+        )}
       </aside>
 
       <div className="border-b border-border bg-card md:hidden">

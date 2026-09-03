@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { LoginPage } from "@/components/auth/LoginPage";
 import { ToastContainer, useToast } from "@/components/shared/Toast";
 import {
   AuditSkeleton,
@@ -14,7 +15,6 @@ import { EvaluationView } from "@/components/views/EvaluationView";
 import { OverviewView } from "@/components/views/OverviewView";
 import { shortDate } from "@/lib/format";
 import type {
-  ApiHealth,
   AuditLog,
   DashboardTab,
   DemoScenario,
@@ -26,16 +26,31 @@ import type {
 } from "@/lib/types";
 
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
-const MERCHANT_NAME = "Demo Merchant";
+const DEFAULT_MERCHANT_NAME = "Yash Rohilla";
+
+type AuthUser = {
+  id?: string;
+  email: string;
+  name: string;
+  merchantName: string;
+};
 
 export default function App() {
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    try {
+      const saved = localStorage.getItem("rakshapay_user");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
   const [summary, setSummary] = useState<Summary | null>(null);
   const [cases, setCases] = useState<RecoveryCase[]>([]);
   const [audits, setAudits] = useState<AuditLog[]>([]);
   const [series, setSeries] = useState<SeriesPoint[]>([]);
   const [evaluation, setEvaluation] = useState<EvalSnapshot | null>(null);
-  const [health, setHealth] = useState<ApiHealth | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -55,8 +70,7 @@ export default function App() {
       fetch(`${API}/api/analytics/series`).then((r) => r.json()),
       fetch(`${API}/api/analytics/evaluation`).then((r) => r.json()),
     ])
-      .then(([h, s, c, a, ser, ev]) => {
-        setHealth(h?.ok ? h : null);
+      .then(([_h, s, c, a, ser, ev]) => {
         setSummary(s?.error ? null : s);
         setCases(Array.isArray(c) ? c : []);
         setAudits(Array.isArray(a) ? a : []);
@@ -65,7 +79,6 @@ export default function App() {
         setError(null);
       })
       .catch(() => {
-        setHealth(null);
         setError("Backend offline — start backend on :4000");
       })
       .finally(() => {
@@ -75,10 +88,31 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
     load(false);
     const id = setInterval(() => load(true), 5000);
     return () => clearInterval(id);
-  }, [load]);
+  }, [load, user]);
+
+  const handleLogin = (newUser: AuthUser) => {
+    setUser(newUser);
+    try {
+      localStorage.setItem("rakshapay_user", JSON.stringify(newUser));
+    } catch {
+      // ignore
+    }
+    showToast(`Welcome back, ${newUser.name}!`, "success");
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    try {
+      localStorage.removeItem("rakshapay_user");
+    } catch {
+      // ignore
+    }
+    showToast("Signed out of RakshaPay terminal", "success");
+  };
 
   const filteredCases = useMemo(() => {
     if (filter === "ALL") return cases;
@@ -142,6 +176,16 @@ export default function App() {
     }
   }
 
+  // If not logged in, show the login view
+  if (!user) {
+    return (
+      <>
+        <LoginPage onLogin={handleLogin} />
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      </>
+    );
+  }
+
   function renderActiveView() {
     if (initialLoading && !hasData) {
       switch (activeTab) {
@@ -163,8 +207,6 @@ export default function App() {
             summary={summary}
             chartData={chartData}
             cases={cases}
-            health={health}
-            backendOnline={backendOnline}
             onOpenResearch={() => setActiveTab("evaluation")}
           />
         );
@@ -195,12 +237,13 @@ export default function App() {
       <DashboardLayout
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        merchantName={MERCHANT_NAME}
+        merchantName={user.merchantName || DEFAULT_MERCHANT_NAME}
         backendOnline={backendOnline}
-        health={health}
         refreshing={refreshing}
         busy={busy}
         onRunDemo={triggerDemo}
+        user={user}
+        onLogout={handleLogout}
       >
         {error && (
           <Alert variant="destructive" className="mb-4">

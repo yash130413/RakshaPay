@@ -30,7 +30,7 @@ export function EvaluationView({ evaluation }: EvaluationViewProps) {
         </div>
         {headline ? (
           <>
-            <p className="mt-3 text-sm text-muted-foreground">Blind retry baseline vs RazorRecover agent</p>
+            <p className="mt-3 text-sm text-muted-foreground">Blind retry baseline vs Raksha Pay agent</p>
             <div className="mt-2 flex flex-wrap items-end gap-3">
               <span className="text-3xl font-bold tabular-nums text-muted-foreground line-through decoration-reject/40">
                 {headline.baseline}
@@ -67,7 +67,7 @@ export function EvaluationView({ evaluation }: EvaluationViewProps) {
           {!evaluation ? (
             <EmptyState
               title="Evaluation snapshot unavailable"
-              body="Start the backend to load baseline vs RazorRecover metrics."
+              body="Start the backend to load baseline vs Raksha Pay metrics."
             />
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -83,7 +83,7 @@ export function EvaluationView({ evaluation }: EvaluationViewProps) {
                     </p>
                     <p className="font-semibold text-recovery-foreground">
                       <span className="text-xs font-normal uppercase text-muted-foreground">
-                        RazorRecover{" "}
+                        Raksha Pay{" "}
                       </span>
                       {h.agent}
                     </p>
@@ -108,7 +108,7 @@ export function EvaluationView({ evaluation }: EvaluationViewProps) {
         <CardContent className="space-y-2 text-sm text-muted-foreground">
           <p>
             3,000 synthetic payment failures (seed=42). Holdout split n=885. Baseline = blind retry on
-            every failure. RazorRecover = rules + policy gates (same defaults as live demo).
+            every failure. Raksha Pay = rules + policy gates (same defaults as live demo).
           </p>
           <p>
             Live dashboard metrics come from Neon DB. This tab is the reproducible research artifact for

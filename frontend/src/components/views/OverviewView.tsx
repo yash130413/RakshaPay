@@ -16,17 +16,14 @@ import { HeroMetrics } from "@/components/shared/HeroMetrics";
 import { JudgeQuickStart } from "@/components/shared/JudgeQuickStart";
 import { PolicyLimitsCard } from "@/components/shared/PolicyLimitsCard";
 import { SubmissionBanner } from "@/components/shared/SubmissionBanner";
-import { SystemStatusBar } from "@/components/shared/SystemStatusBar";
 import { formatInr } from "@/lib/format";
 import { computeAgentMix } from "@/lib/submission";
-import type { ApiHealth, RecoveryCase, SeriesPoint, Summary } from "@/lib/types";
+import type { RecoveryCase, SeriesPoint, Summary } from "@/lib/types";
 
 type OverviewViewProps = {
   summary: Summary | null;
   chartData: (SeriesPoint & { label: string })[];
   cases: RecoveryCase[];
-  health: ApiHealth | null;
-  backendOnline: boolean;
   onOpenResearch?: () => void;
 };
 
@@ -34,8 +31,6 @@ export function OverviewView({
   summary,
   chartData,
   cases,
-  health,
-  backendOnline,
   onOpenResearch,
 }: OverviewViewProps) {
   const agentMix = computeAgentMix(cases);
@@ -43,7 +38,6 @@ export function OverviewView({
   return (
     <div className="space-y-8">
       <SubmissionBanner onOpenResearch={onOpenResearch} />
-      <SystemStatusBar health={health} backendOnline={backendOnline} />
       <HeroMetrics summary={summary} />
 
       <div className="grid gap-4 lg:grid-cols-2">

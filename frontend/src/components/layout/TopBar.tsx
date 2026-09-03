@@ -1,15 +1,17 @@
-import { Sparkles, Store } from "lucide-react";
+import { LogOut, Store, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { DemoMenu } from "./DemoMenu";
-import type { ApiHealth, DemoScenario } from "@/lib/types";
+import type { DemoScenario } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type TopBarProps = {
   merchantName: string;
   backendOnline: boolean;
-  health: ApiHealth | null;
   refreshing?: boolean;
   busy: boolean;
   onRunDemo: (scenario: DemoScenario) => void;
+  user?: { email: string; name: string; merchantName?: string } | null;
+  onLogout?: () => void;
 };
 
 const TAGLINE = ["AI decides", "Policy controls", "Razorpay executes", "Webhooks verify"] as const;
@@ -45,14 +47,12 @@ function LiveStatus({ online, refreshing }: { online: boolean; refreshing: boole
 export function TopBar({
   merchantName,
   backendOnline,
-  health,
   refreshing = false,
   busy,
   onRunDemo,
+  user,
+  onLogout,
 }: TopBarProps) {
-  const geminiOn = health?.llm?.configured ?? false;
-  const model = health?.llm?.model?.replace("gemini-", "") ?? "flash";
-
   return (
     <header className="sticky top-0 z-40 shrink-0 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85">
       <div className="flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between md:gap-4 md:px-6 md:py-3.5">
@@ -64,26 +64,17 @@ export function TopBar({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
               <h1 className="truncate text-base font-bold tracking-tight text-foreground md:hidden">
-                Razor<span className="text-recovery">Recover</span>
+                Raksha<span className="text-recovery">Pay</span>
               </h1>
 
               <span className="hidden truncate text-[15px] font-semibold tracking-tight text-foreground md:inline">
-                {merchantName}
+                {user?.merchantName || merchantName}
               </span>
 
               <span className="hidden h-4 w-px bg-border md:inline-block" aria-hidden />
 
               <div className="flex flex-wrap items-center gap-1.5">
                 <LiveStatus online={backendOnline} refreshing={refreshing} />
-                <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-                  Test mode
-                </span>
-                {geminiOn && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-gemini-muted bg-gemini-muted/80 px-2.5 py-0.5 text-[11px] font-semibold text-gemini-foreground">
-                    <Sparkles className="size-3" />
-                    Gemini · {model}
-                  </span>
-                )}
               </div>
             </div>
 
@@ -98,8 +89,32 @@ export function TopBar({
           </div>
         </div>
 
-        <div className="shrink-0 self-end md:self-auto">
+        <div className="flex shrink-0 items-center gap-2 self-end md:self-auto">
           <DemoMenu busy={busy} onRun={onRunDemo} />
+
+          {onLogout && (
+            <div className="flex items-center gap-1.5 border-l border-border pl-2">
+              <div
+                title={user?.email || "Logged In"}
+                className="hidden items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground sm:flex"
+              >
+                <User className="size-3.5 text-muted-foreground" />
+                <span className="max-w-[110px] truncate font-medium">
+                  {user?.name || "Merchant"}
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onLogout}
+                title="Sign out"
+                className="h-9 px-2 text-muted-foreground hover:bg-muted hover:text-reject"
+                aria-label="Sign out"
+              >
+                <LogOut className="size-4" />
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </header>

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 const STEPS = [
   { icon: Sparkles, label: "AI decides", detail: "Gemini diagnosis + strategy" },
   { icon: Shield, label: "Policy controls", detail: "Amount · retries · human gate" },
-  { icon: Zap, label: "Razorpay executes", detail: "Test Mode payment links" },
+  { icon: Zap, label: "Razorpay executes", detail: "Recovery payment links" },
   { icon: Webhook, label: "Webhooks verify", detail: "Capture → RECOVERED" },
 ];
 
@@ -26,7 +26,7 @@ export function SubmissionBanner({ onOpenResearch }: SubmissionBannerProps) {
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground text-balance">
           When a payment fails, Gemini recommends a recovery action. Policy gates every move.
-          Razorpay executes in Test Mode. Webhooks verify recovered rupees on this dashboard.
+          Razorpay executes. Webhooks verify recovered rupees on this dashboard.
         </p>
       </div>
       <div className="grid gap-px bg-border/60 sm:grid-cols-4">
@@ -43,7 +43,7 @@ export function SubmissionBanner({ onOpenResearch }: SubmissionBannerProps) {
       {onOpenResearch && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-4 py-2.5 sm:px-5">
           <p className="text-xs text-muted-foreground">
-            Held-out eval: blind retry <strong className="text-foreground">49.3%</strong> → RazorRecover{" "}
+            Held-out eval: blind retry <strong className="text-foreground">49.3%</strong> → Raksha Pay{" "}
             <strong className="text-recovery">68.6%</strong> recovery
           </p>
           <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={onOpenResearch}>

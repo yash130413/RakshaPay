@@ -90,7 +90,7 @@ export function CaseDetailContent({
                 className="rounded-lg border border-border bg-muted/40 p-3 text-sm"
               >
                 <span className="block font-mono text-[10px] uppercase text-muted-foreground">
-                  {d.agent}
+                  {d.agent.replace(/_gemini$/, "").replace(/_/g, " ")}
                 </span>
                 <span className="font-medium text-foreground">
                   {d.diagnosis ?? d.recommendedAction ?? "—"}

@@ -25,7 +25,7 @@ export function AiSourceBadge({ decisions, className }: AiSourceBadgeProps) {
     return (
       <Badge variant="gemini" className={cn("gap-1", className)}>
         <Sparkles className="size-3" />
-        Gemini
+        AI Decision
       </Badge>
     );
   }
