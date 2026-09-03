@@ -38,10 +38,10 @@ export async function executeRecoveryAction(params: {
     ) {
       const description =
         action === "METHOD_UPDATE"
-          ? `RazorRecover: update payment method & pay (case ${recoveryCaseId})`
+          ? `RakshaPay: update payment method & pay (case ${recoveryCaseId})`
           : action === "RETRY_PAYMENT"
-            ? `RazorRecover: retry via recovery payment link (case ${recoveryCaseId})`
-            : `RazorRecover: recovery payment link (case ${recoveryCaseId})`;
+            ? `RakshaPay: retry via recovery payment link (case ${recoveryCaseId})`
+            : `RakshaPay: recovery payment link (case ${recoveryCaseId})`;
 
       const link = await RazorpayService.createPaymentLink({
         amount: amountPaise,
@@ -51,9 +51,9 @@ export async function executeRecoveryAction(params: {
         notes: {
           recovery_case_id: recoveryCaseId,
           recovery_action: action,
-          source: "razorrecover",
+          source: "rakshapay",
         },
-        referenceId: `rr_${recoveryCaseId.slice(-12)}`,
+        referenceId: `rp_${recoveryCaseId.slice(-12)}`,
       });
 
       const linkId = String(link.id ?? "");
