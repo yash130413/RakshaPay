@@ -8,7 +8,6 @@ import {
   Save,
   Settings,
   Shield,
-  ShieldAlert,
   ShieldCheck,
   User,
   Webhook,
@@ -193,6 +192,8 @@ export function SettingsView({ user, policy: policyProp, onPolicySaved }: Settin
         maxRecoveryAmount: policyProp.maxRecoveryAmount,
         requireHumanAbove: policyProp.requireHumanAbove,
         allowPaymentLink: policyProp.allowPaymentLink,
+        notifyCustomerSms: policyProp.notifyCustomerSms ?? prev.notifyCustomerSms,
+        notifyCustomerEmail: policyProp.notifyCustomerEmail ?? prev.notifyCustomerEmail,
       }));
       setLoading(false);
       return;
@@ -210,6 +211,8 @@ export function SettingsView({ user, policy: policyProp, onPolicySaved }: Settin
           maxRecoveryAmount: data.maxRecoveryAmount,
           requireHumanAbove: data.requireHumanAbove,
           allowPaymentLink: data.allowPaymentLink,
+          notifyCustomerSms: data.notifyCustomerSms ?? prev.notifyCustomerSms,
+          notifyCustomerEmail: data.notifyCustomerEmail ?? prev.notifyCustomerEmail,
         }));
       })
       .catch(() => {
@@ -247,6 +250,8 @@ export function SettingsView({ user, policy: policyProp, onPolicySaved }: Settin
           maxRecoveryAmount: policy.maxRecoveryAmount,
           requireHumanAbove: policy.requireHumanAbove,
           allowPaymentLink: policy.allowPaymentLink,
+          notifyCustomerSms: policy.notifyCustomerSms,
+          notifyCustomerEmail: policy.notifyCustomerEmail,
         }),
       });
       const data = await res.json();
@@ -532,14 +537,6 @@ export function SettingsView({ user, policy: policyProp, onPolicySaved }: Settin
                 onChange={(v) => patch("notifyCustomerEmail", v)}
                 tone="recovery"
               />
-              <div className="flex items-start gap-2 rounded-xl border border-brand/20 bg-brand/5 p-3 text-[11px]">
-                <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-brand" />
-                <p className="text-muted-foreground">
-                  WhatsApp delivery is controlled from your{" "}
-                  <strong className="text-foreground">Razorpay Dashboard → Settings → Notifications</strong>.
-                  Enable it there to activate WhatsApp recovery messages.
-                </p>
-              </div>
             </CardContent>
           </Card>
         </div>

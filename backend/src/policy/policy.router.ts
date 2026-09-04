@@ -10,6 +10,8 @@ const DEFAULT_POLICY = {
   maxRecoveryAmount: 50000,
   allowPaymentLink: true,
   requireHumanAbove: 25000,
+  notifyCustomerSms: true,
+  notifyCustomerEmail: true,
   active: true,
 } as const;
 
@@ -21,6 +23,8 @@ function serializePolicy(policy: {
   maxRecoveryAmount: number;
   allowPaymentLink: boolean;
   requireHumanAbove: number;
+  notifyCustomerSms: boolean;
+  notifyCustomerEmail: boolean;
   active: boolean;
   updatedAt: Date;
 }) {
@@ -32,6 +36,8 @@ function serializePolicy(policy: {
     maxRecoveryAmount: policy.maxRecoveryAmount,
     allowPaymentLink: policy.allowPaymentLink,
     requireHumanAbove: policy.requireHumanAbove,
+    notifyCustomerSms: policy.notifyCustomerSms,
+    notifyCustomerEmail: policy.notifyCustomerEmail,
     active: policy.active,
     updatedAt: policy.updatedAt.toISOString(),
   };
@@ -97,6 +103,8 @@ policyRouter.put(
     const maxRecoveryAmount = Number(body.maxRecoveryAmount);
     const requireHumanAbove = Number(body.requireHumanAbove);
     const allowPaymentLink = Boolean(body.allowPaymentLink);
+    const notifyCustomerSms = Boolean(body.notifyCustomerSms);
+    const notifyCustomerEmail = Boolean(body.notifyCustomerEmail);
 
     if (!Number.isInteger(maxRetries) || maxRetries < 0 || maxRetries > 10) {
       return res.status(400).json({ error: "maxRetries must be an integer between 0 and 10" });
@@ -123,6 +131,8 @@ policyRouter.put(
         maxRecoveryAmount,
         requireHumanAbove,
         allowPaymentLink,
+        notifyCustomerSms,
+        notifyCustomerEmail,
       },
     });
 

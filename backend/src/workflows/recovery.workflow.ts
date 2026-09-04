@@ -65,6 +65,8 @@ export async function startRecoveryWorkflow(params: {
           maxRecoveryAmount: 50000,
           allowPaymentLink: true,
           requireHumanAbove: 25000,
+          notifyCustomerSms: true,
+          notifyCustomerEmail: true,
         },
       },
     },

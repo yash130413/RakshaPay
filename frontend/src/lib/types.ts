@@ -149,6 +149,8 @@ export type MerchantPolicy = {
   maxRecoveryAmount: number;
   allowPaymentLink: boolean;
   requireHumanAbove: number;
+  notifyCustomerSms?: boolean;
+  notifyCustomerEmail?: boolean;
   active: boolean;
   updatedAt: string;
 };

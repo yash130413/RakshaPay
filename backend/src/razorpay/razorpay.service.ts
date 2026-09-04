@@ -48,10 +48,16 @@ export class RazorpayService {
     customer?: { name?: string; email?: string; contact?: string };
     notes?: Record<string, string>;
     referenceId?: string;
+    notify?: { sms?: boolean; email?: boolean };
   }): Promise<{ id: string; short_url?: string }> {
     if (!razorpayClient) throw new Error("Razorpay not configured");
 
-    const notifyCustomer = process.env.RAZORPAY_NOTIFY_CUSTOMER === "true" || process.env.RAZORPAY_NOTIFY_CUSTOMER === "1";
+    const envNotify =
+      process.env.RAZORPAY_NOTIFY_CUSTOMER === "true" ||
+      process.env.RAZORPAY_NOTIFY_CUSTOMER === "1";
+
+    const sms = params.notify?.sms ?? envNotify;
+    const email = params.notify?.email ?? envNotify;
 
     const payload: Record<string, unknown> = {
       amount: params.amount,
@@ -60,9 +66,9 @@ export class RazorpayService {
       notes: params.notes,
       reference_id: params.referenceId,
       notify: {
-        sms: notifyCustomer,
-        email: notifyCustomer,
-        whatsapp: notifyCustomer,
+        sms,
+        email,
+        whatsapp: false,
       },
     };
 

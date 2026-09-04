@@ -43,6 +43,23 @@ export async function executeRecoveryAction(params: {
             ? `RakshaPay: retry via recovery payment link (case ${recoveryCaseId})`
             : `RakshaPay: recovery payment link (case ${recoveryCaseId})`;
 
+      const recoveryCase = await prisma.recoveryCase.findUnique({
+        where: { id: recoveryCaseId },
+        select: { merchantId: true },
+      });
+
+      const policy = recoveryCase?.merchantId
+        ? await prisma.policy.findFirst({
+            where: { merchantId: recoveryCase.merchantId, active: true },
+            orderBy: { updatedAt: "desc" },
+          })
+        : null;
+
+      const notify = {
+        sms: policy?.notifyCustomerSms ?? true,
+        email: policy?.notifyCustomerEmail ?? true,
+      };
+
       const link = await RazorpayService.createPaymentLink({
         amount: amountPaise,
         currency: currency ?? "INR",
@@ -54,6 +71,7 @@ export async function executeRecoveryAction(params: {
           source: "rakshapay",
         },
         referenceId: `rp_${recoveryCaseId.slice(-12)}`,
+        notify,
       });
 
       const linkId = String(link.id ?? "");
@@ -75,6 +93,7 @@ export async function executeRecoveryAction(params: {
           shortUrl,
           action,
           executionMode: "razorpay_payment_link",
+          notify,
         },
       };
     }
