@@ -12,6 +12,10 @@ import {
 } from "../customers/customer.context.js";
 import { evaluatePolicy } from "../policy/policy.engine.js";
 import { executeRecoveryAction } from "../recovery/recovery.executor.js";
+import type { RecoveryCase, RecoveryCaseStatus } from "@prisma/client";
+
+/** Terminal statuses — only these get a brand-new case on a later failure. */
+const CLOSED_CASE_STATUSES: RecoveryCaseStatus[] = ["RECOVERED", "REJECTED"];
 
 type WebhookPayload = {
   event?: string;
@@ -38,6 +42,8 @@ type WebhookPayload = {
  * RECEIVED → ANALYZING → DIAGNOSED → ACTION_SELECTED → POLICY_CHECK
  * → APPROVED|REJECTED|ESCALATED → EXECUTING → WAITING_FOR_WEBHOOK
  * → RECOVERED|FAILED
+ *
+ * Re-fails for the same customer/open case stay on that case (re-diagnose + optional new link).
  */
 export async function startRecoveryWorkflow(params: {
   webhookEventId: string;
@@ -116,31 +122,53 @@ export async function startRecoveryWorkflow(params: {
         failureReason,
       },
     });
-  } else if (payment && customerCtx && !payment.customerId) {
+  } else if (payment) {
     payment = await prisma.payment.update({
       where: { id: payment.id },
-      data: { customerId: customerCtx.customerId },
+      data: {
+        status: paymentEntity?.status ?? payment.status,
+        failureReason: failureReason ?? payment.failureReason,
+        ...(customerCtx && !payment.customerId
+          ? { customerId: customerCtx.customerId }
+          : {}),
+      },
     });
   }
 
-  const recoveryCase = await prisma.recoveryCase.create({
-    data: {
-      merchantId: merchant.id,
-      customerId: customerCtx?.customerId,
-      paymentId: payment?.id,
-      amount,
-      currency: paymentEntity?.currency ?? "INR",
-      status: "RECEIVED",
-      failureReason,
-    },
+  const resolved = await resolveRecoveryCaseForFailure({
+    merchantId: merchant.id,
+    customerId: customerCtx?.customerId ?? null,
+    paymentId: payment?.id ?? null,
+    amount,
+    currency: paymentEntity?.currency ?? "INR",
+    failureReason,
+    noteCaseId: paymentEntity?.notes?.recovery_case_id ?? null,
   });
+
+  if (resolved.skipWorkflow) {
+    await writeAudit({
+      recoveryCaseId: resolved.recoveryCase.id,
+      eventType: "payment.failed.duplicate",
+      message: `Ignored duplicate payment.failed for ₹${amount / 100} — already handled on this case`,
+      metadata: {
+        razorpayPaymentId: paymentEntity?.id,
+        caseStatus: resolved.recoveryCase.status,
+      },
+    });
+    return;
+  }
+
+  const recoveryCase = resolved.recoveryCase;
 
   await writeAudit({
     recoveryCaseId: recoveryCase.id,
-    eventType: "payment.failed",
-    message: `Payment failed for ₹${amount / 100}`,
+    eventType: resolved.reused ? "payment.failed.reattempt" : "payment.failed",
+    message: resolved.reused
+      ? `Re-attempt failed for ₹${amount / 100} — continuing on existing case`
+      : `Payment failed for ₹${amount / 100}`,
     metadata: {
       razorpayPaymentId: paymentEntity?.id,
+      reusedCase: resolved.reused,
       customerHistory: customerCtx
         ? {
             successfulPayments: customerCtx.successfulPayments,
@@ -175,10 +203,14 @@ export async function startRecoveryWorkflow(params: {
     return;
   }
 
+  const attemptCount = await prisma.recoveryAction.count({
+    where: { recoveryCaseId: recoveryCase.id },
+  });
+
   const diagnosis = await diagnoseFailure({
     failureReason,
     method: paymentEntity?.method,
-    previousAttempts: 0,
+    previousAttempts: attemptCount,
     amountInr: amount / 100,
     successfulPayments: customerCtx?.successfulPayments ?? 0,
     avgAmountInr: customerCtx?.avgAmountInr ?? 0,
@@ -210,10 +242,6 @@ export async function startRecoveryWorkflow(params: {
     eventType: "diagnosis.completed",
     message: diagnosis.diagnosis,
     metadata: diagnosis,
-  });
-
-  const attemptCount = await prisma.recoveryAction.count({
-    where: { recoveryCaseId: recoveryCase.id },
   });
 
   const strategy = await chooseRecoveryStrategy({
@@ -361,6 +389,109 @@ export async function startRecoveryWorkflow(params: {
       metadata: policyResult,
     });
   }
+}
+
+/**
+ * Prefer an existing open case for this failure instead of spawning duplicates.
+ * Order: notes.recovery_case_id → same payment → open customer+amount case → create.
+ */
+async function resolveRecoveryCaseForFailure(params: {
+  merchantId: string;
+  customerId: string | null;
+  paymentId: string | null;
+  amount: number;
+  currency: string;
+  failureReason: string | null;
+  noteCaseId: string | null;
+}): Promise<{ recoveryCase: RecoveryCase; reused: boolean; skipWorkflow: boolean }> {
+  const { merchantId, customerId, paymentId, amount, currency, failureReason, noteCaseId } =
+    params;
+
+  const reopenFields = {
+    paymentId: paymentId ?? undefined,
+    amount,
+    currency,
+    failureReason,
+    status: "RECEIVED" as const,
+    diagnosis: null,
+    diagnosisConfidence: null,
+    recommendedAction: null,
+    expectedRecoveryProbability: null,
+  };
+
+  if (noteCaseId) {
+    const fromNotes = await prisma.recoveryCase.findUnique({ where: { id: noteCaseId } });
+    if (fromNotes && fromNotes.merchantId === merchantId) {
+      if (CLOSED_CASE_STATUSES.includes(fromNotes.status)) {
+        // Fall through — closed case should not absorb new failures
+      } else if (
+        paymentId &&
+        fromNotes.paymentId === paymentId &&
+        fromNotes.status !== "RECEIVED"
+      ) {
+        return { recoveryCase: fromNotes, reused: true, skipWorkflow: true };
+      } else {
+        const updated = await prisma.recoveryCase.update({
+          where: { id: fromNotes.id },
+          data: reopenFields,
+        });
+        return { recoveryCase: updated, reused: true, skipWorkflow: false };
+      }
+    }
+  }
+
+  if (paymentId) {
+    const byPayment = await prisma.recoveryCase.findFirst({
+      where: { merchantId, paymentId },
+      orderBy: { createdAt: "desc" },
+    });
+    if (byPayment) {
+      if (CLOSED_CASE_STATUSES.includes(byPayment.status)) {
+        return { recoveryCase: byPayment, reused: true, skipWorkflow: true };
+      }
+      if (byPayment.status !== "RECEIVED") {
+        // Same Razorpay payment already drove a full recovery pass
+        return { recoveryCase: byPayment, reused: true, skipWorkflow: true };
+      }
+      const updated = await prisma.recoveryCase.update({
+        where: { id: byPayment.id },
+        data: reopenFields,
+      });
+      return { recoveryCase: updated, reused: true, skipWorkflow: false };
+    }
+  }
+
+  if (customerId) {
+    const openCase = await prisma.recoveryCase.findFirst({
+      where: {
+        merchantId,
+        customerId,
+        amount,
+        status: { notIn: CLOSED_CASE_STATUSES },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+    if (openCase) {
+      const updated = await prisma.recoveryCase.update({
+        where: { id: openCase.id },
+        data: reopenFields,
+      });
+      return { recoveryCase: updated, reused: true, skipWorkflow: false };
+    }
+  }
+
+  const created = await prisma.recoveryCase.create({
+    data: {
+      merchantId,
+      customerId: customerId ?? undefined,
+      paymentId: paymentId ?? undefined,
+      amount,
+      currency,
+      status: "RECEIVED",
+      failureReason,
+    },
+  });
+  return { recoveryCase: created, reused: false, skipWorkflow: false };
 }
 
 type PaymentEntity = NonNullable<
