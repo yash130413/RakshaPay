@@ -9,13 +9,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { PolicyLimitsCard } from "@/components/shared/PolicyLimitsCard";
-import type { EvalSnapshot } from "@/lib/types";
+import type { EvalSnapshot, MerchantPolicy } from "@/lib/types";
 
 type EvaluationViewProps = {
   evaluation: EvalSnapshot | null;
+  policy?: MerchantPolicy | null;
 };
 
-export function EvaluationView({ evaluation }: EvaluationViewProps) {
+export function EvaluationView({ evaluation, policy }: EvaluationViewProps) {
   const headline = evaluation?.highlights.find((h) => h.label === "Recovery rate");
   const unnecessary = evaluation?.highlights.find((h) => h.label === "Unnecessary retries");
 
@@ -157,7 +158,7 @@ export function EvaluationView({ evaluation }: EvaluationViewProps) {
       </Card>
 
       {/* Merchant Policy Guardrails */}
-      <PolicyLimitsCard />
+      <PolicyLimitsCard policy={policy} />
 
       {/* Methodology & Verification */}
       <div className="grid gap-4 lg:grid-cols-2">

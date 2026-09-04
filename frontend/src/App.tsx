@@ -21,6 +21,7 @@ import type {
   DashboardTab,
   DemoScenario,
   EvalSnapshot,
+  MerchantPolicy,
   RecoveryCase,
   SeriesPoint,
   StatusFilter,
@@ -53,6 +54,7 @@ export default function App() {
   const [audits, setAudits] = useState<AuditLog[]>([]);
   const [series, setSeries] = useState<SeriesPoint[]>([]);
   const [evaluation, setEvaluation] = useState<EvalSnapshot | null>(null);
+  const [policy, setPolicy] = useState<MerchantPolicy | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -65,6 +67,8 @@ export default function App() {
   const load = useCallback((isPoll = false) => {
     if (isPoll) setRefreshing(true);
 
+    const merchantQs = user?.id ? `?merchantId=${encodeURIComponent(user.id)}` : "";
+
     Promise.all([
       fetch(`${API}/health`).then((r) => r.json()),
       fetch(`${API}/api/analytics/summary`).then((r) => r.json()),
@@ -72,13 +76,15 @@ export default function App() {
       fetch(`${API}/api/recovery/audit`).then((r) => r.json()),
       fetch(`${API}/api/analytics/series`).then((r) => r.json()),
       fetch(`${API}/api/analytics/evaluation`).then((r) => r.json()),
+      fetch(`${API}/api/policy${merchantQs}`).then((r) => r.json()),
     ])
-      .then(([_h, s, c, a, ser, ev]) => {
+      .then(([_h, s, c, a, ser, ev, pol]) => {
         setSummary(s?.error ? null : s);
         setCases(Array.isArray(c) ? c : []);
         setAudits(Array.isArray(a) ? a : []);
         setSeries(Array.isArray(ser?.series) ? ser.series : []);
         setEvaluation(ev?.highlights ? ev : null);
+        setPolicy(pol?.maxRetries != null && !pol?.error ? pol : null);
         setError(null);
       })
       .catch(() => {
@@ -88,7 +94,7 @@ export default function App() {
         setInitialLoading(false);
         setRefreshing(false);
       });
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user) return;
@@ -290,9 +296,18 @@ export default function App() {
       case "audit":
         return <AuditView audits={audits} selectedCaseId={selectedId} />;
       case "evaluation":
-        return <EvaluationView evaluation={evaluation} />;
+        return <EvaluationView evaluation={evaluation} policy={policy} />;
       case "settings":
-        return <SettingsView user={user} />;
+        return (
+          <SettingsView
+            user={user}
+            policy={policy}
+            onPolicySaved={(next) => {
+              setPolicy(next);
+              showToast("Policy guardrails saved", "success");
+            }}
+          />
+        );
     }
   }
 

@@ -140,6 +140,19 @@ export type ApiHealth = {
   };
 };
 
+/** Live merchant policy from GET/PUT /api/policy */
+export type MerchantPolicy = {
+  id: string;
+  merchantId: string;
+  name: string;
+  maxRetries: number;
+  maxRecoveryAmount: number;
+  allowPaymentLink: boolean;
+  requireHumanAbove: number;
+  active: boolean;
+  updatedAt: string;
+};
+
 export type StatusFilter = "ALL" | "WAITING_FOR_WEBHOOK" | "RECOVERED" | "ESCALATED" | "REJECTED";
 
 export type DashboardTab = "overview" | "cases" | "review" | "audit" | "evaluation" | "settings";

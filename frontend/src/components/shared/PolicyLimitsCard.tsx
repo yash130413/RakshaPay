@@ -2,9 +2,17 @@ import { Shield } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DEMO_POLICY_LIMITS } from "@/lib/submission";
 import { formatInr } from "@/lib/format";
+import type { MerchantPolicy } from "@/lib/types";
 
-export function PolicyLimitsCard() {
-  const { maxRetries, maxRecoveryInr, humanReviewAboveInr, paymentLinks } = DEMO_POLICY_LIMITS;
+type PolicyLimitsCardProps = {
+  policy?: MerchantPolicy | null;
+};
+
+export function PolicyLimitsCard({ policy }: PolicyLimitsCardProps) {
+  const maxRetries = policy?.maxRetries ?? DEMO_POLICY_LIMITS.maxRetries;
+  const maxRecoveryInr = policy?.maxRecoveryAmount ?? DEMO_POLICY_LIMITS.maxRecoveryInr;
+  const humanReviewAboveInr = policy?.requireHumanAbove ?? DEMO_POLICY_LIMITS.humanReviewAboveInr;
+  const paymentLinks = policy?.allowPaymentLink ?? DEMO_POLICY_LIMITS.paymentLinks;
 
   return (
     <Card className="border-escalate/20 bg-gradient-to-br from-card to-escalate-muted/10">
@@ -14,7 +22,7 @@ export function PolicyLimitsCard() {
           <CardTitle className="text-base">Merchant Policy Guardrails</CardTitle>
         </div>
         <CardDescription>
-          Hard deterministic limits — safety & compliance gates protecting transaction flows
+          Live merchant limits from Settings — same values the recovery engine enforces
         </CardDescription>
       </CardHeader>
       <CardContent>

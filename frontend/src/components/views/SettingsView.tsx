@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertCircle,
   Bell,
@@ -18,8 +18,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import type { MerchantPolicy } from "@/lib/types";
 
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
+/** Public backend URL for Razorpay webhook config (must be reachable from the internet). */
+const LIVE_API =
+  import.meta.env.VITE_PUBLIC_API_URL ?? "https://rakshapay.onrender.com";
 
 type PolicySettings = {
   maxRetries: number;
@@ -40,7 +44,9 @@ const DEFAULTS: PolicySettings = {
 };
 
 type SettingsViewProps = {
-  user?: { name: string; email: string; merchantName?: string } | null;
+  user?: { id?: string; name: string; email: string; merchantName?: string } | null;
+  policy?: MerchantPolicy | null;
+  onPolicySaved?: (policy: MerchantPolicy) => void;
 };
 
 function SectionHeader({
@@ -172,11 +178,51 @@ function ToggleRow({
   );
 }
 
-export function SettingsView({ user }: SettingsViewProps) {
+export function SettingsView({ user, policy: policyProp, onPolicySaved }: SettingsViewProps) {
   const [policy, setPolicy] = useState<PolicySettings>({ ...DEFAULTS });
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (policyProp) {
+      setPolicy((prev) => ({
+        ...prev,
+        maxRetries: policyProp.maxRetries,
+        maxRecoveryAmount: policyProp.maxRecoveryAmount,
+        requireHumanAbove: policyProp.requireHumanAbove,
+        allowPaymentLink: policyProp.allowPaymentLink,
+      }));
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const qs = user?.id ? `?merchantId=${encodeURIComponent(user.id)}` : "";
+    fetch(`${API}/api/policy${qs}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled || data?.error || data?.maxRetries == null) return;
+        setPolicy((prev) => ({
+          ...prev,
+          maxRetries: data.maxRetries,
+          maxRecoveryAmount: data.maxRecoveryAmount,
+          requireHumanAbove: data.requireHumanAbove,
+          allowPaymentLink: data.allowPaymentLink,
+        }));
+      })
+      .catch(() => {
+        /* keep defaults */
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [policyProp, user?.id]);
 
   const patch = <K extends keyof PolicySettings>(key: K, val: PolicySettings[K]) => {
     setSaved(false);
@@ -184,14 +230,33 @@ export function SettingsView({ user }: SettingsViewProps) {
   };
 
   const handleSave = async () => {
+    if (policy.requireHumanAbove >= policy.maxRecoveryAmount) {
+      setSaveError("Escalation threshold must be lower than rejection limit.");
+      return;
+    }
+
     setSaving(true);
     setSaveError(null);
     try {
-      // Policy save endpoint (backend can extend later)
-      await new Promise((r) => setTimeout(r, 600)); // simulate save
+      const res = await fetch(`${API}/api/policy`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchantId: user?.id,
+          maxRetries: policy.maxRetries,
+          maxRecoveryAmount: policy.maxRecoveryAmount,
+          requireHumanAbove: policy.requireHumanAbove,
+          allowPaymentLink: policy.allowPaymentLink,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data?.error) {
+        throw new Error(data?.error ?? "Save failed");
+      }
+      onPolicySaved?.(data as MerchantPolicy);
       setSaved(true);
-    } catch {
-      setSaveError("Failed to save. Check backend connection.");
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save. Check backend connection.");
     } finally {
       setSaving(false);
     }
@@ -242,12 +307,12 @@ export function SettingsView({ user }: SettingsViewProps) {
           )}
           <Button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || loading}
             className="h-9 gap-2 bg-recovery text-white shadow-sm hover:bg-recovery/90"
             size="sm"
           >
             <Save className="size-3.5" />
-            {saving ? "Saving…" : "Save Settings"}
+            {saving ? "Saving…" : loading ? "Loading…" : "Save Settings"}
           </Button>
         </div>
       </div>
@@ -302,7 +367,7 @@ export function SettingsView({ user }: SettingsViewProps) {
                   Live Endpoint
                 </p>
                 <p className="mt-1 break-all font-mono text-xs text-foreground">
-                  {API}/webhooks/razorpay
+                  {LIVE_API.replace(/\/$/, "")}/webhooks/razorpay
                 </p>
               </div>
               <div className="space-y-1.5 text-[11px] text-muted-foreground">
