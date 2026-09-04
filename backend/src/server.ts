@@ -6,6 +6,7 @@ import { analyticsRouter } from "./analytics/analytics.router.js";
 import { recoveryRouter } from "./recovery/recovery.router.js";
 import { authRouter } from "./auth/auth.router.js";
 import { policyRouter } from "./policy/policy.router.js";
+import { assistantRouter } from "./assistant/assistant.router.js";
 import { isLlmConfigured } from "./agents/index.js";
 import { connectDatabaseWithRetry } from "./db.js";
 import { errorHandler } from "./utils/errorHandler.js";
@@ -43,6 +44,7 @@ app.get("/health", (_req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/policy", policyRouter);
+app.use("/api/assistant", assistantRouter);
 app.use("/api/recovery", recoveryRouter);
 app.use("/api/analytics", analyticsRouter);
 

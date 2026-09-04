@@ -157,7 +157,14 @@ export type MerchantPolicy = {
 
 export type StatusFilter = "ALL" | "WAITING_FOR_WEBHOOK" | "RECOVERED" | "ESCALATED" | "REJECTED";
 
-export type DashboardTab = "overview" | "cases" | "review" | "audit" | "evaluation" | "settings";
+export type DashboardTab =
+  | "overview"
+  | "cases"
+  | "review"
+  | "audit"
+  | "evaluation"
+  | "assistant"
+  | "settings";
 
 export type DemoScenario =
   | "recoverable"

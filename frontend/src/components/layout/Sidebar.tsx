@@ -1,6 +1,7 @@
 import {
   ArrowRight,
   BarChart3,
+  Bot,
   ClipboardList,
   LayoutDashboard,
   ScrollText,
@@ -16,6 +17,7 @@ const NAV_ITEMS: { id: DashboardTab; label: string; icon: typeof LayoutDashboard
   { id: "cases", label: "Cases", icon: ClipboardList },
   { id: "review", label: "Review", icon: UserCheck },
   { id: "audit", label: "Audit", icon: ScrollText },
+  { id: "assistant", label: "RakshaPay", icon: Bot },
   { id: "evaluation", label: "Research", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },
 ];

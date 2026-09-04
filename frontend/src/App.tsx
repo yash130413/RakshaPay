@@ -10,6 +10,7 @@ import {
   OverviewSkeleton,
 } from "@/components/shared/ViewSkeletons";
 import { AuditView } from "@/components/views/AuditView";
+import { AssistantView } from "@/components/views/AssistantView";
 import { CasesView } from "@/components/views/CasesView";
 import { EvaluationView } from "@/components/views/EvaluationView";
 import { OverviewView } from "@/components/views/OverviewView";
@@ -295,6 +296,15 @@ export default function App() {
         );
       case "audit":
         return <AuditView audits={audits} selectedCaseId={selectedId} />;
+      case "assistant":
+        return (
+          <AssistantView
+            onOpenCase={(caseId) => {
+              setSelectedId(caseId);
+              setActiveTab("cases");
+            }}
+          />
+        );
       case "evaluation":
         return <EvaluationView evaluation={evaluation} policy={policy} />;
       case "settings":
