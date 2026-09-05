@@ -52,7 +52,7 @@ recoveryRouter.get(
   "/cases/:id",
   asyncHandler(async (req, res) => {
     const id = String(req.params.id);
-    const recoveryCase = await prisma.recoveryCase.findUnique({
+  const recoveryCase = await prisma.recoveryCase.findUnique({
       where: { id },
     include: {
       decisions: { orderBy: { createdAt: "asc" } },

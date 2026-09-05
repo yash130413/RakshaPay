@@ -1,6 +1,8 @@
-# Evaluation outputs (generated)
-results/
+# Evaluation outputs (regenerated runs)
+results/*
 !results/.gitkeep
+!results/comparison.md
+!results/comparison.json
 
 # Python
 __pycache__/

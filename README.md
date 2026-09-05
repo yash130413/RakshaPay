@@ -8,6 +8,15 @@ When revenue slips — failed Razorpay payments, abandoned checkouts, failed man
 
 Repo folder: `razorrecover` · Product brand: **RakshaPay**
 
+### Live demo
+
+| | URL |
+|--|-----|
+| **Dashboard** | [https://raksha-pay-eight.vercel.app/](https://raksha-pay-eight.vercel.app/) |
+| **API** | [https://rakshapay.onrender.com](https://rakshapay.onrender.com) · health: [/health](https://rakshapay.onrender.com/health) |
+
+Demo login: `demo@rakshapay.com` / `demo1234`
+
 ---
 
 ## What it does
@@ -213,7 +222,7 @@ LLM cannot bypass these — policy is deterministic TypeScript.
 | Total retries | 2026 | **222** |
 | Unnecessary retries | 1009 | **0** |
 
-Reproduce: [evaluation/README.md](./evaluation/README.md) · Results: [evaluation/results/comparison.md](./evaluation/results/comparison.md)
+Reproduce: [evaluation/README.md](./evaluation/README.md) · Snapshot: [evaluation/results/comparison.md](./evaluation/results/comparison.md) (also served on the Research tab via `backend/src/analytics/eval.snapshot.ts`)
 
 ---
 

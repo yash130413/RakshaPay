@@ -1,0 +1,32 @@
+{
+  "split": "holdout",
+  "n": 885,
+  "seed": 42,
+  "baseline": {
+    "recoveryRate": 0.4927,
+    "revenueRecovered": 3771646,
+    "revenueRecoveryRate": 0.461,
+    "retries": 2026,
+    "unnecessaryRetries": 1009,
+    "paymentLinks": 0,
+    "escalations": 0,
+    "policyRejects": 0
+  },
+  "rakshapay": {
+    "recoveryRate": 0.6859,
+    "revenueRecovered": 4503538,
+    "revenueRecoveryRate": 0.55,
+    "retries": 222,
+    "unnecessaryRetries": 0,
+    "paymentLinks": 614,
+    "escalations": 100,
+    "policyRejects": 16
+  },
+  "delta": {
+    "recoveryRatePp": 19.3,
+    "revenueRecovered": 731892,
+    "retries": -1804,
+    "unnecessaryRetries": -1009
+  },
+  "notes": "Snapshot aligned with backend/src/analytics/eval.snapshot.ts (product brand RakshaPay; legacy key name razorrecover in TS snapshot)."
+}
