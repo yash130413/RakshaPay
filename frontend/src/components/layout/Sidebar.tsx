@@ -12,12 +12,12 @@ import {
 import { cn } from "@/lib/utils";
 import type { DashboardTab } from "@/lib/types";
 
-const NAV_ITEMS: { id: DashboardTab; label: string; icon: typeof LayoutDashboard }[] = [
+const NAV_ITEMS: { id: DashboardTab; label: string; icon: typeof LayoutDashboard; agent?: boolean }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "assistant", label: "RakshaPay", icon: Bot, agent: true },
   { id: "cases", label: "Cases", icon: ClipboardList },
   { id: "review", label: "Review", icon: UserCheck },
   { id: "audit", label: "Audit", icon: ScrollText },
-  { id: "assistant", label: "RakshaPay", icon: Bot },
   { id: "evaluation", label: "Research", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },
 ];
@@ -72,7 +72,7 @@ export function Sidebar({ active, onChange }: SidebarProps) {
           <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
             Navigation
           </p>
-          {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
+          {NAV_ITEMS.map(({ id, label, icon: Icon, agent }) => {
             const isActive = active === id;
             return (
               <button
@@ -80,10 +80,20 @@ export function Sidebar({ active, onChange }: SidebarProps) {
                 type="button"
                 onClick={() => onChange(id)}
                 className={cn(
-                  "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
-                  isActive
-                    ? "bg-accent text-recovery-foreground shadow-sm shadow-recovery/10"
-                    : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                  "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all",
+                  agent
+                    ? cn(
+                        "font-bold tracking-tight",
+                        isActive
+                          ? "bg-accent text-slate-900 shadow-sm shadow-recovery/10"
+                          : "text-slate-900 hover:bg-muted/80"
+                      )
+                    : cn(
+                        "font-medium",
+                        isActive
+                          ? "bg-accent text-recovery-foreground shadow-sm shadow-recovery/10"
+                          : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                      )
                 )}
               >
                 <span
@@ -95,10 +105,21 @@ export function Sidebar({ active, onChange }: SidebarProps) {
                 <Icon
                   className={cn(
                     "size-4 shrink-0 transition-colors",
-                    isActive ? "text-recovery" : "text-muted-foreground group-hover:text-foreground"
+                    agent
+                      ? isActive
+                        ? "text-recovery"
+                        : "text-slate-800 group-hover:text-slate-900"
+                      : isActive
+                        ? "text-recovery"
+                        : "text-muted-foreground group-hover:text-foreground"
                   )}
                 />
-                {label}
+                <span className={cn(agent && "font-bold text-slate-900")}>{label}</span>
+                {agent && (
+                  <span className="ml-auto rounded-md bg-recovery-muted px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-recovery">
+                    AI
+                  </span>
+                )}
               </button>
             );
           })}
@@ -130,19 +151,27 @@ export function Sidebar({ active, onChange }: SidebarProps) {
           <BrandMark compact />
         </div>
         <nav className="flex gap-1 overflow-x-auto px-2 py-2">
-          {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
+          {NAV_ITEMS.map(({ id, label, icon: Icon, agent }) => (
             <button
               key={id}
               type="button"
               onClick={() => onChange(id)}
               className={cn(
-                "flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors",
-                active === id
-                  ? "bg-accent text-recovery-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-muted"
+                "flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors",
+                agent
+                  ? cn(
+                      "font-bold text-slate-900",
+                      active === id ? "bg-accent shadow-sm" : "hover:bg-muted"
+                    )
+                  : cn(
+                      "font-medium",
+                      active === id
+                        ? "bg-accent text-recovery-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted"
+                    )
               )}
             >
-              <Icon className="size-3.5" />
+              <Icon className={cn("size-3.5", agent && "text-slate-800")} />
               {label}
             </button>
           ))}

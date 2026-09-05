@@ -303,11 +303,6 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
                     : "rounded-bl-md border border-border/60 bg-card/95 text-foreground backdrop-blur-sm"
                 )}
               >
-                {m.role === "assistant" && m.id === "welcome" && (
-                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-recovery">
-                    Agent briefing
-                  </p>
-                )}
                 <p className="whitespace-pre-wrap">{renderMarkdownLite(m.content)}</p>
 
                 {!!m.cases?.length && (
