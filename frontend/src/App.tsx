@@ -299,6 +299,8 @@ export default function App() {
       case "assistant":
         return (
           <AssistantView
+            merchantName={user?.name || user?.merchantName || DEFAULT_MERCHANT_NAME}
+            onDataChanged={() => load()}
             onOpenCase={(caseId) => {
               setSelectedId(caseId);
               setActiveTab("cases");

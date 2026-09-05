@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { isLlmConfigured } from "../agents/llm.client.js";
 import {
   ASSISTANT_TOOL_DECLARATIONS,
+  WRITE_TOOLS,
   executeAssistantTool,
   getDashboardSummary,
   getPolicy,
@@ -29,6 +30,14 @@ export type AssistantChatResult = {
   suggestions: string[];
   model: string | null;
   toolsUsed: string[];
+  pendingActions?: PendingAction[];
+};
+
+export type PendingAction = {
+  tool: string;
+  args: Record<string, unknown>;
+  summary: string;
+  preview?: unknown;
 };
 
 const TOOL_CATALOG = ASSISTANT_TOOL_DECLARATIONS.map((t) => {
@@ -37,37 +46,46 @@ const TOOL_CATALOG = ASSISTANT_TOOL_DECLARATIONS.map((t) => {
   return `- ${t.name}: ${t.description} args=${JSON.stringify({ properties: Object.keys(props), required })}`;
 }).join("\n");
 
-const SYSTEM_PROMPT = `You are **RakshaPay**, the merchant AI revenue-recovery assistant inside the RakshaPay dashboard.
+const SYSTEM_PROMPT = `You are **RakshaPay**, the merchant AI revenue-recovery agent inside the RakshaPay dashboard.
 
 Personality:
-- Warm, sharp, concise.
+- Warm, sharp, concise, action-oriented.
 - **Language rule (strict):** Reply in the same language as the merchant's latest message.
-  - If they write/speak in Hindi or Hinglish → reply in natural Hindi/Hinglish.
-  - If they write/speak in English → reply in clear English only.
-- Never invent case IDs, amounts, or metrics. Always use tool results for live facts.
-- If data is empty, say so clearly and suggest running a demo or waiting for a real payment.failed webhook.
+  - Hindi/Hinglish question → Hindi/Hinglish reply.
+  - English question → English reply.
+- Never invent case IDs, amounts, or metrics. Always use tools for live facts.
+- If data is empty, say so and suggest a demo (escalate is best for review flow).
 
 Product knowledge:
-- Flow: payment.failed → AI diagnose → strategy → policy guardrails → Razorpay payment link → payment.captured → RECOVERED.
-- Policy: amounts above requireHumanAbove escalate; above maxRecoveryAmount reject; AI cannot bypass policy.
-- AI Decision = Gemini. Rules fallback = Gemini unavailable, deterministic TypeScript rules used.
-- Tabs: Overview, Cases, Review, Audit, Research, Settings, and this RakshaPay assistant.
+- Flow: payment.failed → AI diagnose → strategy → policy → Razorpay link → payment.captured → RECOVERED.
+- Policy: above requireHumanAbove → ESCALATE; above maxRecoveryAmount → REJECT.
+- Review flow: ESCALATED cases must be **assigned** before Approve/Reject on the Review page.
+- Prefer: assign cases to the merchant, then tell them to open Review and Approve. Only call review_case approve/reject if they explicitly ask you to approve/reject.
 
-Tools (live database):
-${TOOL_CATALOG}
+Actions you can take (tools):
+- Read: get_dashboard_summary, list_cases, list_unassigned_escalated, get_case_detail, get_policy, get_audit_events, simulate_policy, get_research_metrics
+- Write (MUST request confirmation first by calling WITHOUT confirmed=true): assign_case, assign_all_unassigned_escalated, review_case, run_demo, update_policy
+- When a write tool returns needsConfirmation=true, explain the plan briefly and tell the merchant to press Confirm in the UI (or say "confirm"). Do NOT claim the action already happened.
+- After confirmation, the UI will execute with confirmed=true.
+
+Common intents:
+- "assign escalated cases to me" → list_unassigned_escalated then assign_all_unassigned_escalated
+- "run escalate demo" → run_demo scenario=escalate
+- "raise human threshold to 40000" → update_policy requireHumanAbove=40000
 
 Tool protocol (critical — no native function roles):
-- If you need live data before answering, reply with ONLY this JSON (no markdown fences):
+- If you need data or want to propose an action, reply with ONLY JSON:
   {"tool_calls":[{"name":"tool_name","args":{...}}]}
-- You may include multiple tool_calls.
-- After tool results are provided, answer in natural language for the merchant.
+- After tool results, answer in natural language.
 - Never invent tool results.
 
 Response style:
 - Short paragraphs or tight bullets.
-- Use ₹ Indian formatting when quoting money.
-- When discussing specific cases, mention short id suffix and status.
-- End with 1 helpful next question only when natural (do not always).`;
+- Use ₹ formatting.
+- Mention short case id suffix when relevant.
+
+Available tools:
+${TOOL_CATALOG}`;
 
 function getClient() {
   const apiKey = process.env.LLM_API_KEY ?? process.env.GEMINI_API_KEY ?? "";
@@ -267,8 +285,10 @@ async function deterministicFallback(message: string): Promise<AssistantChatResu
 export async function runAssistantChat(params: {
   message: string;
   history?: ChatMessage[];
+  merchantName?: string;
 }): Promise<AssistantChatResult> {
   const message = params.message.trim();
+  const merchantName = (params.merchantName ?? "").trim() || process.env.MERCHANT_NAME || "Demo Merchant";
   if (!message) {
     return {
       reply: "Ask me about cases, recovery, policy, or a specific payment.",
@@ -291,7 +311,7 @@ export async function runAssistantChat(params: {
   try {
     const model = client.getGenerativeModel({
       model: modelName(),
-      systemInstruction: SYSTEM_PROMPT,
+      systemInstruction: `${SYSTEM_PROMPT}\n\nLogged-in merchant display name: ${merchantName}. Prefer assigning cases to this name.`,
       generationConfig: {
         temperature: 0.3,
       },
@@ -305,6 +325,7 @@ export async function runAssistantChat(params: {
     const chat = model.startChat({ history });
     const toolsUsed: string[] = [];
     const toolPayloads: unknown[] = [];
+    const pendingActions: PendingAction[] = [];
 
     let result = await chat.sendMessage(message);
     let text = result.response.text()?.trim() ?? "";
@@ -318,9 +339,48 @@ export async function runAssistantChat(params: {
       const bundle: { name: string; args: Record<string, unknown>; result: unknown }[] = [];
       for (const call of calls) {
         toolsUsed.push(call.name);
-        const output = await executeAssistantTool(call.name, call.args);
+        const enrichedArgs = { ...call.args };
+        if (
+          WRITE_TOOLS.has(call.name) &&
+          !enrichedArgs.assignedTo &&
+          (call.name === "assign_case" || call.name === "assign_all_unassigned_escalated")
+        ) {
+          enrichedArgs.assignedTo = merchantName;
+        }
+        if (call.name === "review_case" && !enrichedArgs.reviewedBy) {
+          enrichedArgs.reviewedBy = merchantName;
+        }
+        const output = await executeAssistantTool(call.name, enrichedArgs);
         toolPayloads.push(output);
-        bundle.push({ name: call.name, args: call.args, result: output });
+        bundle.push({ name: call.name, args: enrichedArgs, result: output });
+
+        if (
+          output &&
+          typeof output === "object" &&
+          (output as { needsConfirmation?: boolean }).needsConfirmation === true
+        ) {
+          const p = output as {
+            tool: string;
+            args: Record<string, unknown>;
+            summary: string;
+            preview?: unknown;
+          };
+          pendingActions.push({
+            tool: p.tool,
+            args: p.args,
+            summary: p.summary,
+            preview: p.preview,
+          });
+        }
+      }
+
+      // Stop after proposing write confirmations — don't pretend they executed
+      if (pendingActions.length) {
+        result = await chat.sendMessage(
+          `Tool results include pending confirmations. Explain the plan briefly and tell the merchant to press Confirm in the UI. Do NOT say the write action is done yet.\n\n${JSON.stringify(bundle, null, 2)}`
+        );
+        text = result.response.text()?.trim() ?? "";
+        break;
       }
 
       result = await chat.sendMessage(
@@ -329,8 +389,8 @@ export async function runAssistantChat(params: {
       text = result.response.text()?.trim() ?? "";
     }
 
-    // If model still returned tool JSON, force one final answer with whatever we have
-    if (parseToolCalls(text)) {
+    // If model still returned tool JSON (and no pending), force a final answer
+    if (!pendingActions.length && parseToolCalls(text)) {
       const [summary, policy, recent] = await Promise.all([
         getDashboardSummary(),
         getPolicy(),
@@ -347,12 +407,16 @@ export async function runAssistantChat(params: {
     const reply =
       text && !parseToolCalls(text)
         ? text
-        : prefersHindi(message)
-          ? "Data mil gaya, lekin jawab generate nahi ho paya. Dobara try karo."
-          : "I got the data, but couldn't format the answer. Please try again.";
+        : pendingActions.length
+          ? prefersHindi(message)
+            ? `Plan ready hai. Confirm dabao: ${pendingActions.map((p) => p.summary).join(" · ")}`
+            : `Ready when you are. Press Confirm: ${pendingActions.map((p) => p.summary).join(" · ")}`
+          : prefersHindi(message)
+            ? "Data mil gaya, lekin jawab generate nahi ho paya. Dobara try karo."
+            : "I got the data, but couldn't format the answer. Please try again.";
 
     let finalCases = extractCaseCards(toolPayloads);
-    if (!finalCases.length && /case|recover|escalat|reject|diagnos/i.test(message + reply)) {
+    if (!finalCases.length && /case|recover|escalat|reject|diagnos|assign/i.test(message + reply)) {
       const recent = await listCases({ limit: 3 });
       finalCases = recent.map((c) => ({
         id: c.id,
@@ -371,9 +435,38 @@ export async function runAssistantChat(params: {
       suggestions: DEFAULT_SUGGESTIONS,
       model: modelName(),
       toolsUsed: [...new Set(toolsUsed)],
+      pendingActions: pendingActions.length ? pendingActions : undefined,
     };
   } catch (err) {
     console.warn("Assistant Gemini path failed — using live-data fallback:", err);
     return deterministicFallback(message);
   }
+}
+
+/** Execute a previously proposed write tool with confirmed=true */
+export async function confirmAssistantAction(params: {
+  tool: string;
+  args: Record<string, unknown>;
+}): Promise<{ ok: boolean; result: unknown; reply: string }> {
+  const tool = String(params.tool ?? "").trim();
+  const args = { ...(params.args ?? {}), confirmed: true };
+  const result = await executeAssistantTool(tool, args);
+  const ok =
+    !!result &&
+    typeof result === "object" &&
+    !(result as { error?: string }).error &&
+    !(result as { needsConfirmation?: boolean }).needsConfirmation;
+
+  const message =
+    result && typeof result === "object" && "message" in result
+      ? String((result as { message?: string }).message ?? "")
+      : "";
+
+  return {
+    ok,
+    result,
+    reply: ok
+      ? message || `Done: ${tool}`
+      : String((result as { error?: string })?.error ?? `Could not complete ${tool}`),
+  };
 }

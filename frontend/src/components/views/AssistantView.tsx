@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Bot,
+  Check,
   Loader2,
   Mic,
   MicOff,
   Send,
   Volume2,
   VolumeX,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,15 +28,26 @@ type CaseCard = {
   customerEmail?: string | null;
 };
 
+type PendingAction = {
+  tool: string;
+  args: Record<string, unknown>;
+  summary: string;
+  preview?: unknown;
+};
+
 type ChatItem = {
   id: string;
   role: ChatRole;
   content: string;
   cases?: CaseCard[];
+  pendingActions?: PendingAction[];
+  confirmed?: boolean;
 };
 
 type AssistantViewProps = {
   onOpenCase?: (caseId: string) => void;
+  merchantName?: string;
+  onDataChanged?: () => void;
 };
 
 function uid() {
@@ -52,28 +65,40 @@ function detectUserLang(text: string): "hi-IN" | "en-IN" {
   if (/[\u0900-\u097F]/.test(text)) return "hi-IN";
   const lower = text.toLowerCase();
   const hindiCue =
-    /\b(kya|hai|hain|kitne|kitna|batao|dikhao|karo|kaise|kyun|kyu|nahi|nahin|mujhe|mera|meri|aaj|kal|wale|wali|hoon|hun|poochho|poocho|samjha|thik|theek|rupees?|rupaye)\b/.test(
+    /\b(kya|hai|hain|kitne|kitna|batao|dikhao|karo|kaise|kyun|kyu|nahi|nahin|mujhe|mera|meri|aaj|kal|wale|wali|hoon|hun|poochho|poocho|samjha|thik|theek|rupees?|rupaye|confirm|haan|haa)\b/.test(
       lower
     );
   return hindiCue ? "hi-IN" : "en-IN";
 }
 
-export function AssistantView({ onOpenCase }: AssistantViewProps) {
+function isConfirmPhrase(text: string) {
+  return /^(confirm|yes|yep|haan|haa|ok|okay|go ahead|do it|kar do|haan karo)\.?$/i.test(
+    text.trim()
+  );
+}
+
+export function AssistantView({
+  onOpenCase,
+  merchantName = "Demo Merchant",
+  onDataChanged,
+}: AssistantViewProps) {
   const [messages, setMessages] = useState<ChatItem[]>([
     {
       id: "welcome",
       role: "assistant",
       content:
-        "Hi — I’m **RakshaPay**, your AI revenue recovery agent. Ask about cases, diagnosis, policy, or recovery rate in Hindi or English. You can also use the mic.",
+        "Hi — I’m **RakshaPay**, your AI revenue recovery agent. I can assign escalated cases, run demos, and update policy — you’ll get Confirm / Cancel before any write. Ask in Hindi or English, or use the mic.",
     },
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const [voiceOut, setVoiceOut] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [micLang, setMicLang] = useState<"hi-IN" | "en-IN">("en-IN");
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const messagesRef = useRef(messages);
   const recognitionRef = useRef<{
     stop: () => void;
     start: () => void;
@@ -86,8 +111,12 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
   } | null>(null);
 
   useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, busy]);
+  }, [messages, busy, confirmingId]);
 
   useEffect(() => {
     return () => {
@@ -119,6 +148,101 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
     window.speechSynthesis.speak(utter);
   }
 
+  function latestPendingMessage(): ChatItem | null {
+    for (let i = messagesRef.current.length - 1; i >= 0; i -= 1) {
+      const m = messagesRef.current[i];
+      if (m.role === "assistant" && m.pendingActions?.length && !m.confirmed) return m;
+    }
+    return null;
+  }
+
+  async function executePending(actions: PendingAction[], lang: "hi-IN" | "en-IN") {
+    const replies: string[] = [];
+    let anyOk = false;
+
+    for (const action of actions) {
+      const args = { ...action.args };
+      if (
+        (action.tool === "assign_case" || action.tool === "assign_all_unassigned_escalated") &&
+        !args.assignedTo
+      ) {
+        args.assignedTo = merchantName;
+      }
+      if (action.tool === "review_case" && !args.reviewedBy) {
+        args.reviewedBy = merchantName;
+      }
+
+      const res = await fetch(`${API}/api/assistant/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tool: action.tool, args }),
+      });
+      const data = await res.json();
+      if (!res.ok && !data?.reply) {
+        throw new Error(data?.error ?? "Confirm failed");
+      }
+      if (data.ok) anyOk = true;
+      replies.push(String(data.reply ?? (data.ok ? "Done." : "Failed.")));
+    }
+
+    if (anyOk) onDataChanged?.();
+    return replies.join("\n");
+  }
+
+  async function confirmMessage(msgId: string, lang: "hi-IN" | "en-IN" = micLang) {
+    const target = messagesRef.current.find((m) => m.id === msgId);
+    if (!target?.pendingActions?.length || target.confirmed || busy) return;
+
+    setConfirmingId(msgId);
+    setBusy(true);
+    setError(null);
+
+    try {
+      const reply = await executePending(target.pendingActions, lang);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msgId ? { ...m, confirmed: true, pendingActions: undefined } : m))
+      );
+      const assistantMsg: ChatItem = {
+        id: uid(),
+        role: "assistant",
+        content: reply,
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+      speak(reply, lang);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Confirm failed";
+      setError(msg);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uid(),
+          role: "assistant",
+          content:
+            lang === "hi-IN"
+              ? `Action fail ho gaya: ${msg}`
+              : `Action failed: ${msg}`,
+        },
+      ]);
+    } finally {
+      setBusy(false);
+      setConfirmingId(null);
+    }
+  }
+
+  function cancelPending(msgId: string, lang: "hi-IN" | "en-IN" = micLang) {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msgId ? { ...m, confirmed: true, pendingActions: undefined } : m
+      )
+    );
+    const cancelText =
+      lang === "hi-IN" ? "Theek hai — action cancel kar diya." : "Okay — cancelled.";
+    setMessages((prev) => [
+      ...prev,
+      { id: uid(), role: "assistant", content: cancelText },
+    ]);
+  }
+
   async function sendMessage(raw: string) {
     const text = raw.trim();
     if (!text || busy) return;
@@ -127,12 +251,21 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
     setMicLang(userLang);
     setError(null);
     setInput("");
+
+    const pending = latestPendingMessage();
+    if (pending && isConfirmPhrase(text)) {
+      const userMsg: ChatItem = { id: uid(), role: "user", content: text };
+      setMessages((prev) => [...prev, userMsg]);
+      await confirmMessage(pending.id, userLang);
+      return;
+    }
+
     const userMsg: ChatItem = { id: uid(), role: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
     setBusy(true);
 
     try {
-      const history = [...messages, userMsg]
+      const history = [...messagesRef.current, userMsg]
         .filter((m) => m.id !== "welcome")
         .slice(-8)
         .map((m) => ({ role: m.role, content: m.content }));
@@ -140,7 +273,11 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
       const res = await fetch(`${API}/api/assistant/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, history }),
+        body: JSON.stringify({
+          message: text,
+          history,
+          merchantName,
+        }),
       });
       const data = await res.json();
       if (!res.ok && data?.error && !data?.reply) {
@@ -151,11 +288,16 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
         data.reply ??
           (userLang === "hi-IN" ? "Kuch jawab nahi mila." : "No reply received.")
       );
+      const pendingActions: PendingAction[] = Array.isArray(data.pendingActions)
+        ? data.pendingActions
+        : [];
+
       const assistantMsg: ChatItem = {
         id: uid(),
         role: "assistant",
         content: reply,
         cases: Array.isArray(data.cases) ? data.cases : [],
+        pendingActions: pendingActions.length ? pendingActions : undefined,
       };
       setMessages((prev) => [...prev, assistantMsg]);
       speak(reply, userLang);
@@ -223,7 +365,6 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
 
   return (
     <div className="relative flex h-[calc(100svh-8rem)] min-h-[560px] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm lg:h-[calc(100svh-6.5rem)]">
-      {/* Ambient agent field */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(5,150,105,0.12),_transparent_55%),radial-gradient(ellipse_at_bottom_right,_rgba(14,165,233,0.08),_transparent_45%)]"
@@ -233,7 +374,6 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
         className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:linear-gradient(rgba(15,23,42,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.03)_1px,transparent_1px)] [background-size:28px_28px]"
       />
 
-      {/* Agent header */}
       <header className="relative z-10 border-b border-border/60 bg-card/80 px-4 py-4 backdrop-blur-md sm:px-6 sm:py-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
@@ -279,7 +419,6 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
         </div>
       </header>
 
-      {/* Conversation */}
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6">
           {messages.map((m) => (
@@ -334,11 +473,53 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
                     ))}
                   </div>
                 )}
+
+                {!!m.pendingActions?.length && !m.confirmed && (
+                  <div className="mt-3 space-y-2 rounded-xl border border-escalate/30 bg-escalate/5 px-3 py-2.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-escalate">
+                      Confirm action
+                    </p>
+                    <ul className="space-y-1 text-xs text-foreground">
+                      {m.pendingActions.map((a, i) => (
+                        <li key={`${a.tool}-${i}`} className="leading-snug">
+                          • {a.summary}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 gap-1.5 rounded-lg bg-recovery text-white hover:bg-recovery/90"
+                        disabled={busy}
+                        onClick={() => void confirmMessage(m.id, micLang)}
+                      >
+                        {confirmingId === m.id ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Check className="size-3.5" />
+                        )}
+                        Confirm
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-8 gap-1.5 rounded-lg"
+                        disabled={busy}
+                        onClick={() => cancelPending(m.id, micLang)}
+                      >
+                        <X className="size-3.5" />
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ))}
 
-          {busy && (
+          {busy && !confirmingId && (
             <div className="flex items-center gap-2.5 pl-1 text-xs text-muted-foreground">
               <div className="flex size-8 items-center justify-center rounded-xl bg-recovery-muted text-recovery">
                 <Loader2 className="size-3.5 animate-spin" />
@@ -356,7 +537,6 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
           <div ref={bottomRef} />
         </div>
 
-        {/* Composer */}
         <div className="relative z-10 border-t border-border/60 bg-card/90 px-3 py-3 backdrop-blur-md sm:px-5 sm:py-4">
           {error && <p className="mb-2 text-[11px] text-reject">{error}</p>}
 

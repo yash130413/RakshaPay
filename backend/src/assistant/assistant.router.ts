@@ -1,6 +1,11 @@
 import { Router } from "express";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { runAssistantChat, type ChatMessage } from "./assistant.agent.js";
+import {
+  confirmAssistantAction,
+  runAssistantChat,
+  type ChatMessage,
+} from "./assistant.agent.js";
+import { WRITE_TOOLS } from "./assistant.tools.js";
 
 export const assistantRouter = Router();
 
@@ -31,11 +36,11 @@ assistantRouter.post(
       const result = await runAssistantChat({
         message: message.slice(0, 4000),
         history,
+        merchantName: String(req.body?.merchantName ?? "").trim() || undefined,
       });
       return res.json(result);
     } catch (err) {
       console.error("Assistant chat failed:", err);
-      // Soft fallback so UI never hard-crashes
       const fallback = await runAssistantChat({
         message: "dashboard summary do",
         history: [],
@@ -47,14 +52,32 @@ assistantRouter.post(
           "Assistant temporarily busy hai. Thodi der baad try karo — cases tab se live data dekh sakte ho.",
         cases: fallback?.cases ?? [],
         suggestions: fallback?.suggestions ?? [
-          "Aaj kitne cases hain?",
-          "Recovery rate batao",
-          "Policy limits kya hain?",
+          "How many cases are there?",
+          "What's the recovery rate?",
+          "What are the policy limits?",
         ],
         model: null,
         toolsUsed: fallback?.toolsUsed ?? [],
         error: err instanceof Error ? err.message : "assistant_failed",
       });
     }
+  })
+);
+
+assistantRouter.post(
+  "/confirm",
+  asyncHandler(async (req, res) => {
+    const tool = String(req.body?.tool ?? "").trim();
+    const args =
+      req.body?.args && typeof req.body.args === "object" && !Array.isArray(req.body.args)
+        ? (req.body.args as Record<string, unknown>)
+        : {};
+
+    if (!tool || !WRITE_TOOLS.has(tool)) {
+      return res.status(400).json({ error: "Invalid or non-writable tool" });
+    }
+
+    const result = await confirmAssistantAction({ tool, args });
+    return res.json(result);
   })
 );
