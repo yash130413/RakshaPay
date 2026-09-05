@@ -1,16 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Bot,
-  ClipboardList,
   Loader2,
   Mic,
   MicOff,
   Send,
-  Shield,
-  TrendingUp,
   Volume2,
   VolumeX,
-  AudioWaveform,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -40,22 +36,6 @@ type ChatItem = {
 type AssistantViewProps = {
   onOpenCase?: (caseId: string) => void;
 };
-
-const SUGGESTIONS = [
-  "How many cases are there?",
-  "What's the recovery rate?",
-  "Show escalated cases",
-  "What are the policy limits?",
-  "What happens if ₹40,000 fails?",
-  "Summarize research metrics",
-];
-
-const CAPABILITIES = [
-  { icon: ClipboardList, label: "Case intel", detail: "Status, diagnosis, actions" },
-  { icon: Shield, label: "Policy gates", detail: "Escalation & reject limits" },
-  { icon: TrendingUp, label: "Recovery KPIs", detail: "Rates, revenue, trends" },
-  { icon: AudioWaveform, label: "Voice", detail: "Hindi or English replies" },
-];
 
 function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -104,8 +84,6 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
     onerror: ((ev: unknown) => void) | null;
     onend: (() => void) | null;
   } | null>(null);
-
-  const hasConversation = messages.some((m) => m.id !== "welcome" || messages.length > 1);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -274,9 +252,6 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
               <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
                 Raksha<span className="text-recovery">Pay</span>
               </h1>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Coordinates live recovery intel · talks Hindi or English
-              </p>
             </div>
           </div>
 
@@ -301,25 +276,6 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
               {voiceOut ? "Voice on" : "Voice off"}
             </Button>
           </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
-          {CAPABILITIES.map(({ icon: Icon, label, detail }) => (
-            <div
-              key={label}
-              className="rounded-xl border border-border/50 bg-card/70 px-3 py-2.5 backdrop-blur-sm"
-            >
-              <div className="flex items-center gap-2">
-                <div className="flex size-7 items-center justify-center rounded-lg bg-recovery-muted text-recovery">
-                  <Icon className="size-3.5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-semibold text-foreground">{label}</p>
-                  <p className="truncate text-[10px] text-muted-foreground">{detail}</p>
-                </div>
-              </div>
-            </div>
-          ))}
         </div>
       </header>
 
@@ -408,22 +364,6 @@ export function AssistantView({ onOpenCase }: AssistantViewProps) {
         {/* Composer */}
         <div className="relative z-10 border-t border-border/60 bg-card/90 px-3 py-3 backdrop-blur-md sm:px-5 sm:py-4">
           {error && <p className="mb-2 text-[11px] text-reject">{error}</p>}
-
-          {(!hasConversation || messages.length <= 2) && (
-            <div className="mb-3 flex flex-wrap gap-1.5">
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void sendMessage(s)}
-                  className="rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition hover:border-recovery/40 hover:bg-recovery-muted/40 hover:text-foreground disabled:opacity-50"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
 
           <form
             className="flex items-end gap-2 rounded-2xl border border-border/80 bg-background p-2 shadow-inner shadow-slate-900/5"

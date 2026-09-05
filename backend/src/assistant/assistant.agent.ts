@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, SchemaType, type FunctionDeclaration, type Tool } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { isLlmConfigured } from "../agents/llm.client.js";
 import {
   ASSISTANT_TOOL_DECLARATIONS,
@@ -31,6 +31,12 @@ export type AssistantChatResult = {
   toolsUsed: string[];
 };
 
+const TOOL_CATALOG = ASSISTANT_TOOL_DECLARATIONS.map((t) => {
+  const props = (t.parameters as { properties?: Record<string, unknown> }).properties ?? {};
+  const required = (t.parameters as { required?: string[] }).required ?? [];
+  return `- ${t.name}: ${t.description} args=${JSON.stringify({ properties: Object.keys(props), required })}`;
+}).join("\n");
+
 const SYSTEM_PROMPT = `You are **RakshaPay**, the merchant AI revenue-recovery assistant inside the RakshaPay dashboard.
 
 Personality:
@@ -47,6 +53,16 @@ Product knowledge:
 - AI Decision = Gemini. Rules fallback = Gemini unavailable, deterministic TypeScript rules used.
 - Tabs: Overview, Cases, Review, Audit, Research, Settings, and this RakshaPay assistant.
 
+Tools (live database):
+${TOOL_CATALOG}
+
+Tool protocol (critical — no native function roles):
+- If you need live data before answering, reply with ONLY this JSON (no markdown fences):
+  {"tool_calls":[{"name":"tool_name","args":{...}}]}
+- You may include multiple tool_calls.
+- After tool results are provided, answer in natural language for the merchant.
+- Never invent tool results.
+
 Response style:
 - Short paragraphs or tight bullets.
 - Use ₹ Indian formatting when quoting money.
@@ -61,37 +77,6 @@ function getClient() {
 
 function modelName() {
   return process.env.LLM_MODEL ?? "gemini-3.6-flash";
-}
-
-function toolDeclarationsForSdk(): FunctionDeclaration[] {
-  return ASSISTANT_TOOL_DECLARATIONS.map((t) => {
-    const props = (t.parameters as { properties?: Record<string, { type: string; description?: string }> })
-      .properties ?? {};
-    const required = (t.parameters as { required?: string[] }).required ?? [];
-
-    return {
-      name: t.name,
-      description: t.description,
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: Object.fromEntries(
-          Object.entries(props).map(([key, val]) => [
-            key,
-            {
-              type:
-                val.type === "NUMBER"
-                  ? SchemaType.NUMBER
-                  : val.type === "BOOLEAN"
-                    ? SchemaType.BOOLEAN
-                    : SchemaType.STRING,
-              description: val.description ?? "",
-            },
-          ])
-        ),
-        required,
-      },
-    } as FunctionDeclaration;
-  });
 }
 
 function extractCaseCards(toolResults: unknown[]): AssistantCaseCard[] {
@@ -148,6 +133,52 @@ function prefersHindi(message: string): boolean {
   );
 }
 
+type ToolCall = { name: string; args: Record<string, unknown> };
+
+function parseToolCalls(text: string): ToolCall[] | null {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = (fenced?.[1] ?? trimmed).trim();
+
+  try {
+    const parsed = JSON.parse(candidate) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const calls = (parsed as { tool_calls?: unknown }).tool_calls;
+    if (!Array.isArray(calls) || calls.length === 0) return null;
+
+    const out: ToolCall[] = [];
+    for (const call of calls) {
+      if (!call || typeof call !== "object") continue;
+      const name = String((call as { name?: unknown }).name ?? "").trim();
+      if (!name) continue;
+      const argsRaw = (call as { args?: unknown }).args;
+      const args =
+        argsRaw && typeof argsRaw === "object" && !Array.isArray(argsRaw)
+          ? (argsRaw as Record<string, unknown>)
+          : {};
+      out.push({ name, args });
+    }
+    return out.length ? out : null;
+  } catch {
+    // Sometimes model prefixes prose — try to find first JSON object
+    const start = candidate.indexOf("{");
+    const end = candidate.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        const nested = JSON.parse(candidate.slice(start, end + 1)) as {
+          tool_calls?: unknown;
+        };
+        if (Array.isArray(nested.tool_calls) && nested.tool_calls.length) {
+          return parseToolCalls(JSON.stringify(nested));
+        }
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
 async function deterministicFallback(message: string): Promise<AssistantChatResult> {
   const lower = message.toLowerCase();
   const hindi = prefersHindi(message);
@@ -178,7 +209,7 @@ async function deterministicFallback(message: string): Promise<AssistantChatResu
         ? hindi
           ? "Abhi koi escalated case nahi hai."
           : "There are no escalated cases right now."
-        : (hindi ? `Escalated cases (${esc.length}):\n` : `Escalated cases (${esc.length}):\n`) +
+        : `Escalated cases (${esc.length}):\n` +
           esc
             .map(
               (c) =>
@@ -204,7 +235,7 @@ async function deterministicFallback(message: string): Promise<AssistantChatResu
 
   if (lower.includes("policy") || lower.includes("limit")) {
     reply =
-      (hindi ? `Current merchant policy guardrails:\n` : `Current merchant policy guardrails:\n`) +
+      `Current merchant policy guardrails:\n` +
       `• Human escalation above ₹${policy.requireHumanAbove.toLocaleString("en-IN")}\n` +
       `• Hard reject above ₹${policy.maxRecoveryAmount.toLocaleString("en-IN")}\n` +
       `• Max blind retries: ${policy.maxRetries}\n` +
@@ -229,6 +260,10 @@ async function deterministicFallback(message: string): Promise<AssistantChatResu
   };
 }
 
+/**
+ * Gemini chat using only USER / MODEL roles.
+ * Avoids native functionResponse (`role: function`) which gemini-3.6-flash rejects.
+ */
 export async function runAssistantChat(params: {
   message: string;
   history?: ChatMessage[];
@@ -254,12 +289,12 @@ export async function runAssistantChat(params: {
   }
 
   try {
-    const tools: Tool[] = [{ functionDeclarations: toolDeclarationsForSdk() }];
-
     const model = client.getGenerativeModel({
       model: modelName(),
       systemInstruction: SYSTEM_PROMPT,
-      tools,
+      generationConfig: {
+        temperature: 0.3,
+      },
     });
 
     const history = (params.history ?? []).slice(-8).map((m) => ({
@@ -272,41 +307,51 @@ export async function runAssistantChat(params: {
     const toolPayloads: unknown[] = [];
 
     let result = await chat.sendMessage(message);
+    let text = result.response.text()?.trim() ?? "";
     let guard = 0;
 
-    while (guard < 5) {
+    while (guard < 4) {
+      const calls = parseToolCalls(text);
+      if (!calls) break;
       guard += 1;
-      const calls =
-        typeof result.response.functionCalls === "function"
-          ? result.response.functionCalls() ?? []
-          : [];
-      if (!calls.length) break;
 
-      const parts = [];
+      const bundle: { name: string; args: Record<string, unknown>; result: unknown }[] = [];
       for (const call of calls) {
-        const name = call.name;
-        const args = (call.args ?? {}) as Record<string, unknown>;
-        toolsUsed.push(name);
-        const output = await executeAssistantTool(name, args);
+        toolsUsed.push(call.name);
+        const output = await executeAssistantTool(call.name, call.args);
         toolPayloads.push(output);
-        parts.push({
-          functionResponse: {
-            name,
-            response: { result: output },
-          },
-        });
+        bundle.push({ name: call.name, args: call.args, result: output });
       }
 
-      result = await chat.sendMessage(parts);
+      result = await chat.sendMessage(
+        `Tool results (use these facts; do not invent). Now answer the merchant in natural language.\n\n${JSON.stringify(bundle, null, 2)}`
+      );
+      text = result.response.text()?.trim() ?? "";
+    }
+
+    // If model still returned tool JSON, force one final answer with whatever we have
+    if (parseToolCalls(text)) {
+      const [summary, policy, recent] = await Promise.all([
+        getDashboardSummary(),
+        getPolicy(),
+        listCases({ limit: 5 }),
+      ]);
+      toolPayloads.push(summary, recent);
+      result = await chat.sendMessage(
+        `Final context:\n${JSON.stringify({ summary, policy, recentCases: recent }, null, 2)}\n\nAnswer the merchant now in natural language only.`
+      );
+      text = result.response.text()?.trim() ?? "";
+      toolsUsed.push("get_dashboard_summary", "get_policy", "list_cases");
     }
 
     const reply =
-      result.response.text()?.trim() ||
-      "Data mil gaya, lekin jawab generate nahi ho paya. Dobara try karo.";
+      text && !parseToolCalls(text)
+        ? text
+        : prefersHindi(message)
+          ? "Data mil gaya, lekin jawab generate nahi ho paya. Dobara try karo."
+          : "I got the data, but couldn't format the answer. Please try again.";
 
-    const cases = extractCaseCards(toolPayloads);
-
-    let finalCases = cases;
+    let finalCases = extractCaseCards(toolPayloads);
     if (!finalCases.length && /case|recover|escalat|reject|diagnos/i.test(message + reply)) {
       const recent = await listCases({ limit: 3 });
       finalCases = recent.map((c) => ({
