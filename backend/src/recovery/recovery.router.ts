@@ -5,8 +5,29 @@ import { LOYAL_DEMO_EMAIL } from "../customers/customer.context.js";
 import { executeRecoveryAction } from "./recovery.executor.js";
 import { startRecoveryWorkflow } from "../workflows/recovery.workflow.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import {
+  createB2BInvoiceCase,
+  createMandateRetryCase,
+  listDueActions,
+  processDueActions,
+  setPromiseToPay,
+} from "./sequencer.service.js";
 
 export const recoveryRouter = Router();
+
+const DEMO_REVIEWERS = [
+  { id: "collections", name: "Priya Sharma", role: "Collections" },
+  { id: "risk", name: "Arjun Mehta", role: "Risk ops" },
+] as const;
+
+const caseInclude = {
+  actions: true,
+  decisions: { orderBy: { createdAt: "asc" as const } },
+  audits: { orderBy: { createdAt: "asc" as const } },
+  results: true,
+  customer: true,
+  payment: true,
+};
 
 recoveryRouter.get(
   "/cases",
@@ -64,6 +85,165 @@ recoveryRouter.post(
   "/demo/trigger",
   asyncHandler(async (req, res) => {
   const scenario = (req.body?.scenario as string) ?? "recoverable";
+
+  // --- Sequencer / receivables demos (no payment.failed webhook) ---
+  if (scenario === "mandate_retry" || scenario === "b2b_invoice" || scenario === "promise_to_pay") {
+    const defaultEmail = process.env.MERCHANT_EMAIL || "demo@rakshapay.com";
+    const merchant = await prisma.merchant.upsert({
+      where: { email: defaultEmail },
+      update: {},
+      create: {
+        name: process.env.MERCHANT_NAME || "Demo Merchant",
+        email: defaultEmail,
+        policies: {
+          create: {
+            name: "default",
+            maxRetries: 3,
+            retryScheduleDays: "1,3,7",
+            maxRecoveryAmount: 50000,
+            allowPaymentLink: true,
+            requireHumanAbove: 25000,
+            maxInvoiceReminders: 3,
+            notifyCustomerSms: true,
+            notifyCustomerEmail: true,
+          },
+        },
+      },
+    });
+
+    if (scenario === "mandate_retry") {
+      const recoveryCase = await createMandateRetryCase({
+        merchantId: merchant.id,
+        amountInr: 1499,
+      });
+      await writeAudit({
+        eventType: "demo.triggered",
+        message: `Demo mandate_retry: sequencer armed (₹1499)`,
+        metadata: { scenario, caseId: recoveryCase.id },
+      });
+      const full = await prisma.recoveryCase.findUnique({
+        where: { id: recoveryCase.id },
+        include: {
+          decisions: true,
+          actions: true,
+          audits: { orderBy: { createdAt: "asc" } },
+          results: true,
+          customer: true,
+        },
+      });
+      return res.json({
+        ok: true,
+        scenario,
+        label: "Mandate retry sequencer (day 1 → 3 → 7)",
+        amountInr: 1499,
+        case: full,
+      });
+    }
+
+    if (scenario === "b2b_invoice") {
+      const recoveryCase = await createB2BInvoiceCase({
+        merchantId: merchant.id,
+        amountInr: 85000,
+        buyerCompany: "Acme Traders Pvt Ltd",
+        invoiceNumber: `INV-DEMO-${Date.now().toString().slice(-6)}`,
+        buyerEmail: "accounts@acmetraders.demo",
+        dueDaysAgo: 21,
+      });
+      await writeAudit({
+        eventType: "demo.triggered",
+        message: `Demo b2b_invoice: receivable opened`,
+        metadata: { scenario, caseId: recoveryCase.id },
+      });
+      const full = await prisma.recoveryCase.findUnique({
+        where: { id: recoveryCase.id },
+        include: {
+          decisions: true,
+          actions: true,
+          audits: { orderBy: { createdAt: "asc" } },
+          results: true,
+          customer: true,
+        },
+      });
+      return res.json({
+        ok: true,
+        scenario,
+        label: "B2B overdue invoice receivable",
+        amountInr: 85000,
+        case: full,
+      });
+    }
+
+    // promise_to_pay: create a recoverable waiting case then set PTP for tomorrow
+    const suffix = `${Date.now()}`;
+    const amountPaise = 2499 * 100;
+    const paymentId = `pay_demo_ptp_${suffix}`;
+    const failPayload = {
+      event: "payment.failed",
+      id: `evt_demo_ptp_${suffix}`,
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId,
+            amount: amountPaise,
+            currency: "INR",
+            status: "failed",
+            method: "card",
+            error_reason: "insufficient funds",
+            email: LOYAL_DEMO_EMAIL,
+            contact: "+919876543210",
+          },
+        },
+      },
+    };
+    const stored = await prisma.webhookEvent.create({
+      data: {
+        eventId: failPayload.id,
+        eventType: failPayload.event,
+        payload: failPayload as object,
+      },
+    });
+    await startRecoveryWorkflow({ webhookEventId: stored.id, payload: failPayload });
+    await prisma.webhookEvent.update({
+      where: { id: stored.id },
+      data: { processed: true, processedAt: new Date() },
+    });
+    let recoveryCase = await prisma.recoveryCase.findFirst({
+      where: { payment: { razorpayPaymentId: paymentId } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (recoveryCase) {
+      const promiseAt = new Date();
+      promiseAt.setUTCDate(promiseAt.getUTCDate() + 1);
+      await setPromiseToPay({
+        caseId: recoveryCase.id,
+        promiseToPayAt: promiseAt,
+        note: "Customer promised to pay tomorrow (demo)",
+        setBy: "demo",
+      });
+      recoveryCase = await prisma.recoveryCase.findUnique({
+        where: { id: recoveryCase.id },
+        include: {
+          decisions: true,
+          actions: true,
+          audits: { orderBy: { createdAt: "asc" } },
+          results: true,
+          customer: true,
+        },
+      });
+    }
+    await writeAudit({
+      eventType: "demo.triggered",
+      message: `Demo promise_to_pay: PTP set +1 day`,
+      metadata: { scenario, caseId: recoveryCase?.id },
+    });
+    return res.json({
+      ok: true,
+      scenario,
+      label: "Promise-to-pay tracker (+1 day)",
+      amountInr: 2499,
+      case: recoveryCase,
+    });
+  }
 
   const presets: Record<
     string,
@@ -244,12 +424,13 @@ recoveryRouter.post(
     });
   }
 
-  const action =
+  const actionRaw =
     recoveryCase.recommendedAction &&
     recoveryCase.recommendedAction !== "STOP" &&
     recoveryCase.recommendedAction !== "HUMAN_ESCALATION"
       ? recoveryCase.recommendedAction
       : "PAYMENT_LINK";
+  const action = actionRaw === "REMINDER" || actionRaw === "WAIT" ? "PAYMENT_LINK" : actionRaw;
 
   const execution = await executeRecoveryAction({
     recoveryCaseId: recoveryCase.id,
@@ -311,7 +492,7 @@ recoveryRouter.post(
     const id = String(req.params.id);
     const recoveryCase = await prisma.recoveryCase.findUnique({
       where: { id },
-  });
+    });
 
   if (!recoveryCase) {
     return res.status(404).json({ error: "Not found" });
@@ -322,6 +503,8 @@ recoveryRouter.post(
     data: {
       status: "RECOVERED",
       recoveredAmount: recoveryCase.amount,
+      nextActionAt: null,
+      promiseToPayAt: null,
     },
   });
 
@@ -352,19 +535,53 @@ recoveryRouter.post(
   })
 );
 
-const DEMO_REVIEWERS = [
-  { id: "collections", name: "Priya Sharma", role: "Collections" },
-  { id: "risk", name: "Arjun Mehta", role: "Risk ops" },
-] as const;
+/** Record a customer promise-to-pay date */
+recoveryRouter.post(
+  "/cases/:id/promise",
+  asyncHandler(async (req, res) => {
+    const id = String(req.params.id);
+    const dateRaw = String(req.body?.promiseToPayAt ?? "").trim();
+    const note = typeof req.body?.note === "string" ? req.body.note.trim() : undefined;
+    const setBy = typeof req.body?.setBy === "string" ? req.body.setBy.trim() : undefined;
+    if (!dateRaw) return res.status(400).json({ error: "promiseToPayAt is required (ISO date)" });
+    const promiseToPayAt = new Date(dateRaw);
+    if (Number.isNaN(promiseToPayAt.getTime())) {
+      return res.status(400).json({ error: "Invalid promiseToPayAt" });
+    }
+    const result = await setPromiseToPay({ caseId: id, promiseToPayAt, note, setBy });
+    if ((result as { error?: string }).error) {
+      return res.status(400).json(result);
+    }
+    const updated = await prisma.recoveryCase.findUnique({
+      where: { id },
+      include: caseInclude,
+    });
+    return res.json({ ...result, case: updated });
+  })
+);
 
-const caseInclude = {
-  actions: true,
-  decisions: { orderBy: { createdAt: "asc" as const } },
-  audits: { orderBy: { createdAt: "asc" as const } },
-  results: true,
-  customer: true,
-  payment: true,
-};
+/** List cases with due sequencer actions */
+recoveryRouter.get(
+  "/scheduler/due",
+  asyncHandler(async (_req, res) => {
+    const due = await listDueActions(50);
+    return res.json({ count: due.length, due });
+  })
+);
+
+/**
+ * Process due PTP / mandate / B2B actions.
+ * body.forceCaseId — run one case even if nextActionAt is in the future (demo tick)
+ */
+recoveryRouter.post(
+  "/scheduler/tick",
+  asyncHandler(async (req, res) => {
+    const forceCaseId =
+      typeof req.body?.forceCaseId === "string" ? req.body.forceCaseId.trim() : undefined;
+    const result = await processDueActions({ forceCaseId, limit: 20 });
+    return res.json({ ok: true, ...result });
+  })
+);
 
 recoveryRouter.get(
   "/reviewers",

@@ -129,6 +129,9 @@ export default function App() {
     if (filter === "ASSIGNED") {
       return cases.filter((c) => !!c.assignedTo && c.status === "ESCALATED");
     }
+    if (filter === "B2B") {
+      return cases.filter((c) => c.caseSource === "B2B_INVOICE");
+    }
     return cases.filter((c) => c.status === filter);
   }, [cases, filter]);
 
@@ -184,6 +187,51 @@ export default function App() {
       load(true);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Capture failed", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setPromise(caseId: string) {
+    setBusy(true);
+    try {
+      const promiseToPayAt = new Date();
+      promiseToPayAt.setUTCDate(promiseToPayAt.getUTCDate() + 1);
+      const res = await fetch(`${API}/api/recovery/cases/${caseId}/promise`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          promiseToPayAt: promiseToPayAt.toISOString(),
+          note: "Customer promised to pay tomorrow",
+          setBy: user?.name || user?.merchantName || DEFAULT_MERCHANT_NAME,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Promise failed");
+      showToast("Promise-to-pay set (+1 day)", "success");
+      load(true);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Promise failed", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function schedulerTick(caseId: string) {
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/api/recovery/scheduler/tick`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ forceCaseId: caseId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Tick failed");
+      const msg = data.results?.[0]?.message ?? `Processed ${data.processed ?? 0}`;
+      showToast(msg, data.results?.[0]?.ok === false ? "error" : "success");
+      load(true);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Tick failed", "error");
     } finally {
       setBusy(false);
     }
@@ -285,6 +333,8 @@ export default function App() {
             onCloseCase={() => setSelectedId(null)}
             busy={busy}
             onSimulateCapture={simulateCapture}
+            onSetPromise={setPromise}
+            onSchedulerTick={schedulerTick}
           />
         );
       case "review":
@@ -330,10 +380,13 @@ export default function App() {
                 const filters: StatusFilter[] = [
                   "ALL",
                   "WAITING_FOR_WEBHOOK",
+                  "WAITING_PROMISE",
+                  "WAITING_RETRY",
                   "RECOVERED",
                   "ESCALATED",
                   "REJECTED",
                   "ASSIGNED",
+                  "B2B",
                 ];
                 if (filters.includes(f)) {
                   setFilter(f);

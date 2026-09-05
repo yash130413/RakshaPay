@@ -82,6 +82,7 @@ export type RecoveryCase = {
   amount: number;
   currency?: string;
   status: string;
+  caseSource?: string | null;
   failureReason: string | null;
   diagnosis: string | null;
   diagnosisConfidence?: number | null;
@@ -89,6 +90,13 @@ export type RecoveryCase = {
   expectedRecoveryProbability: number | null;
   recoveredAmount: number;
   attemptCount?: number;
+  retrySequenceIndex?: number;
+  nextActionAt?: string | null;
+  promiseToPayAt?: string | null;
+  promiseNote?: string | null;
+  invoiceNumber?: string | null;
+  buyerCompany?: string | null;
+  invoiceDueAt?: string | null;
   assignedTo?: string | null;
   assignedToRole?: string | null;
   assignedAt?: string | null;
@@ -146,9 +154,11 @@ export type MerchantPolicy = {
   merchantId: string;
   name: string;
   maxRetries: number;
+  retryScheduleDays?: string;
   maxRecoveryAmount: number;
   allowPaymentLink: boolean;
   requireHumanAbove: number;
+  maxInvoiceReminders?: number;
   notifyCustomerSms?: boolean;
   notifyCustomerEmail?: boolean;
   active: boolean;
@@ -158,10 +168,13 @@ export type MerchantPolicy = {
 export type StatusFilter =
   | "ALL"
   | "WAITING_FOR_WEBHOOK"
+  | "WAITING_PROMISE"
+  | "WAITING_RETRY"
   | "RECOVERED"
   | "ESCALATED"
   | "REJECTED"
-  | "ASSIGNED";
+  | "ASSIGNED"
+  | "B2B";
 
 export type DashboardTab =
   | "overview"
@@ -177,4 +190,7 @@ export type DemoScenario =
   | "escalate"
   | "reject"
   | "full_recovery"
-  | "abandoned";
+  | "abandoned"
+  | "mandate_retry"
+  | "b2b_invoice"
+  | "promise_to_pay";

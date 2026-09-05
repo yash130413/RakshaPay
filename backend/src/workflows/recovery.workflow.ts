@@ -73,6 +73,8 @@ export async function startRecoveryWorkflow(params: {
           requireHumanAbove: 25000,
           notifyCustomerSms: true,
           notifyCustomerEmail: true,
+          retryScheduleDays: "1,3,7",
+          maxInvoiceReminders: 3,
         },
       },
     },

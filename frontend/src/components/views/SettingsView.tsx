@@ -16,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { MerchantPolicy } from "@/lib/types";
 
@@ -31,6 +32,8 @@ type PolicySettings = {
   allowPaymentLink: boolean;
   notifyCustomerSms: boolean;
   notifyCustomerEmail: boolean;
+  retryScheduleDays: string;
+  maxInvoiceReminders: number;
 };
 
 const DEFAULTS: PolicySettings = {
@@ -40,6 +43,8 @@ const DEFAULTS: PolicySettings = {
   allowPaymentLink: true,
   notifyCustomerSms: true,
   notifyCustomerEmail: true,
+  retryScheduleDays: "1,3,7",
+  maxInvoiceReminders: 3,
 };
 
 type SettingsViewProps = {
@@ -194,6 +199,8 @@ export function SettingsView({ user, policy: policyProp, onPolicySaved }: Settin
         allowPaymentLink: policyProp.allowPaymentLink,
         notifyCustomerSms: policyProp.notifyCustomerSms ?? prev.notifyCustomerSms,
         notifyCustomerEmail: policyProp.notifyCustomerEmail ?? prev.notifyCustomerEmail,
+        retryScheduleDays: policyProp.retryScheduleDays ?? prev.retryScheduleDays,
+        maxInvoiceReminders: policyProp.maxInvoiceReminders ?? prev.maxInvoiceReminders,
       }));
       setLoading(false);
       return;
@@ -213,6 +220,8 @@ export function SettingsView({ user, policy: policyProp, onPolicySaved }: Settin
           allowPaymentLink: data.allowPaymentLink,
           notifyCustomerSms: data.notifyCustomerSms ?? prev.notifyCustomerSms,
           notifyCustomerEmail: data.notifyCustomerEmail ?? prev.notifyCustomerEmail,
+          retryScheduleDays: data.retryScheduleDays ?? prev.retryScheduleDays,
+          maxInvoiceReminders: data.maxInvoiceReminders ?? prev.maxInvoiceReminders,
         }));
       })
       .catch(() => {
@@ -252,6 +261,8 @@ export function SettingsView({ user, policy: policyProp, onPolicySaved }: Settin
           allowPaymentLink: policy.allowPaymentLink,
           notifyCustomerSms: policy.notifyCustomerSms,
           notifyCustomerEmail: policy.notifyCustomerEmail,
+          retryScheduleDays: policy.retryScheduleDays,
+          maxInvoiceReminders: policy.maxInvoiceReminders,
         }),
       });
       const data = await res.json();
@@ -475,6 +486,31 @@ export function SettingsView({ user, policy: policyProp, onPolicySaved }: Settin
                   max={5}
                   step={1}
                   format={(v) => `${v} retries`}
+                />
+                <RangeRow
+                  label="B2B invoice reminders"
+                  sublabel="Reminders before receivable escalates to human"
+                  value={policy.maxInvoiceReminders}
+                  onChange={(v) => patch("maxInvoiceReminders", v)}
+                  min={1}
+                  max={10}
+                  step={1}
+                  format={(v) => `${v} reminders`}
+                />
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-muted/10 p-3">
+                <label className="text-xs font-semibold text-foreground">
+                  Mandate retry schedule (days)
+                </label>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Comma-separated day offsets after failure, e.g. 1,3,7
+                </p>
+                <Input
+                  className="mt-2 h-9 bg-card font-mono text-xs"
+                  value={policy.retryScheduleDays}
+                  onChange={(e) => patch("retryScheduleDays", e.target.value)}
+                  placeholder="1,3,7"
                 />
               </div>
 

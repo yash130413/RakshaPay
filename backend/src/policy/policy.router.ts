@@ -7,9 +7,11 @@ export const policyRouter = Router();
 const DEFAULT_POLICY = {
   name: "default",
   maxRetries: 2,
+  retryScheduleDays: "1,3,7",
   maxRecoveryAmount: 50000,
   allowPaymentLink: true,
   requireHumanAbove: 25000,
+  maxInvoiceReminders: 3,
   notifyCustomerSms: true,
   notifyCustomerEmail: true,
   active: true,
@@ -20,9 +22,11 @@ function serializePolicy(policy: {
   merchantId: string;
   name: string;
   maxRetries: number;
+  retryScheduleDays: string;
   maxRecoveryAmount: number;
   allowPaymentLink: boolean;
   requireHumanAbove: number;
+  maxInvoiceReminders: number;
   notifyCustomerSms: boolean;
   notifyCustomerEmail: boolean;
   active: boolean;
@@ -33,9 +37,11 @@ function serializePolicy(policy: {
     merchantId: policy.merchantId,
     name: policy.name,
     maxRetries: policy.maxRetries,
+    retryScheduleDays: policy.retryScheduleDays ?? "1,3,7",
     maxRecoveryAmount: policy.maxRecoveryAmount,
     allowPaymentLink: policy.allowPaymentLink,
     requireHumanAbove: policy.requireHumanAbove,
+    maxInvoiceReminders: policy.maxInvoiceReminders ?? 3,
     notifyCustomerSms: policy.notifyCustomerSms,
     notifyCustomerEmail: policy.notifyCustomerEmail,
     active: policy.active,
@@ -105,6 +111,15 @@ policyRouter.put(
     const allowPaymentLink = Boolean(body.allowPaymentLink);
     const notifyCustomerSms = Boolean(body.notifyCustomerSms);
     const notifyCustomerEmail = Boolean(body.notifyCustomerEmail);
+    const retryScheduleDays =
+      typeof body.retryScheduleDays === "string" && body.retryScheduleDays.trim()
+        ? body.retryScheduleDays
+            .split(",")
+            .map((s: string) => Number(s.trim()))
+            .filter((n: number) => Number.isFinite(n) && n >= 0)
+            .join(",") || "1,3,7"
+        : "1,3,7";
+    const maxInvoiceReminders = Number(body.maxInvoiceReminders ?? 3);
 
     if (!Number.isInteger(maxRetries) || maxRetries < 0 || maxRetries > 10) {
       return res.status(400).json({ error: "maxRetries must be an integer between 0 and 10" });
@@ -120,6 +135,9 @@ policyRouter.put(
         error: "requireHumanAbove must be lower than maxRecoveryAmount",
       });
     }
+    if (!Number.isInteger(maxInvoiceReminders) || maxInvoiceReminders < 1 || maxInvoiceReminders > 10) {
+      return res.status(400).json({ error: "maxInvoiceReminders must be 1–10" });
+    }
 
     const merchant = await resolveMerchantWithPolicy(merchantId);
     const existing = merchant.policies[0] ?? (await ensureActivePolicy(merchant.id));
@@ -133,6 +151,8 @@ policyRouter.put(
         allowPaymentLink,
         notifyCustomerSms,
         notifyCustomerEmail,
+        retryScheduleDays,
+        maxInvoiceReminders,
       },
     });
 

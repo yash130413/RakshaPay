@@ -17,6 +17,8 @@ enum RecoveryCaseStatus {
   REJECTED
   EXECUTING
   WAITING_FOR_WEBHOOK
+  WAITING_PROMISE
+  WAITING_RETRY
   RECOVERED
   FAILED
   ESCALATED
@@ -29,6 +31,15 @@ enum RecoveryActionType {
   WAIT
   HUMAN_ESCALATION
   STOP
+  REMINDER
+}
+
+enum CaseSource {
+  PAYMENT_FAILED
+  CHECKOUT_ABANDONED
+  MANDATE_RETRY
+  B2B_INVOICE
+  PROMISE_TO_PAY
 }
 
 enum PolicyDecision {
@@ -99,6 +110,7 @@ model RecoveryCase {
   amount          Int
   currency        String             @default("INR")
   status          RecoveryCaseStatus @default(RECEIVED)
+  caseSource      CaseSource         @default(PAYMENT_FAILED)
   failureReason   String?
   diagnosis       String?
   diagnosisConfidence Float?
@@ -106,6 +118,15 @@ model RecoveryCase {
   expectedRecoveryProbability Float?
   recoveredAmount Int                @default(0)
   attemptCount    Int                @default(0)
+  /// Mandate sequencer: which step in retryScheduleDays (0-based)
+  retrySequenceIndex Int             @default(0)
+  /// When the next automated chase / retry / PTP follow-up is due
+  nextActionAt    DateTime?
+  promiseToPayAt  DateTime?
+  promiseNote     String?
+  invoiceNumber   String?
+  buyerCompany    String?
+  invoiceDueAt    DateTime?
   assignedTo      String?
   assignedToRole  String?
   assignedAt      DateTime?
@@ -124,6 +145,8 @@ model RecoveryCase {
 
   @@index([merchantId])
   @@index([status])
+  @@index([caseSource])
+  @@index([nextActionAt])
 }
 
 model AIDecision {
@@ -205,9 +228,13 @@ model Policy {
   merchantId         String
   name               String   @default("default")
   maxRetries         Int      @default(2)
+  /// Comma-separated day offsets for mandate retry sequencer, e.g. "1,3,7"
+  retryScheduleDays  String   @default("1,3,7")
   maxRecoveryAmount  Int      @default(50000)
   allowPaymentLink   Boolean  @default(true)
   requireHumanAbove  Int      @default(25000)
+  /// B2B: reminders before human escalate
+  maxInvoiceReminders Int     @default(3)
   notifyCustomerSms  Boolean  @default(true)
   notifyCustomerEmail Boolean @default(true)
   active             Boolean  @default(true)

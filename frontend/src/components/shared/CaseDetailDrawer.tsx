@@ -41,17 +41,28 @@ type CaseDetailContentProps = {
   selected: RecoveryCase;
   busy: boolean;
   onSimulateCapture: (caseId: string) => void;
+  onSetPromise?: (caseId: string) => void;
+  onSchedulerTick?: (caseId: string) => void;
 };
 
 export function CaseDetailContent({
   selected,
   busy,
   onSimulateCapture,
+  onSetPromise,
+  onSchedulerTick,
 }: CaseDetailContentProps) {
   const history = getCustomerHistory(selected);
   const currency = selected.currency ?? "INR";
   const latestAction = selected.actions?.[selected.actions.length - 1];
   const paymentLink = latestAction?.metadata?.shortUrl;
+  const canTick =
+    selected.status === "WAITING_PROMISE" ||
+    selected.status === "WAITING_RETRY" ||
+    selected.caseSource === "MANDATE_RETRY" ||
+    selected.caseSource === "B2B_INVOICE" ||
+    !!selected.nextActionAt;
+  const canPromise = !["RECOVERED", "REJECTED"].includes(selected.status);
 
   return (
     <div className="space-y-5">
@@ -69,11 +80,50 @@ export function CaseDetailContent({
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <AiSourceBadge decisions={selected.decisions} />
+          {selected.caseSource && selected.caseSource !== "PAYMENT_FAILED" && (
+            <Badge variant="outline">{selected.caseSource.replace(/_/g, " ")}</Badge>
+          )}
           {selected.status === "ESCALATED" && <Badge variant="escalate">Needs human</Badge>}
           {selected.status === "REJECTED" && <Badge variant="reject">Policy blocked</Badge>}
           {selected.status === "RECOVERED" && <Badge variant="recovery">Verified</Badge>}
+          {selected.status === "WAITING_PROMISE" && <Badge variant="outline">Promise to pay</Badge>}
         </div>
       </div>
+
+      {(selected.promiseToPayAt ||
+        selected.nextActionAt ||
+        selected.invoiceNumber ||
+        selected.buyerCompany ||
+        selected.caseSource === "MANDATE_RETRY") && (
+        <Section title="Sequencer & receivables">
+          <dl className="rounded-xl border border-border/70 bg-card px-3">
+            <DetailRow label="Source" value={selected.caseSource?.replace(/_/g, " ")} />
+            <DetailRow label="Invoice" value={selected.invoiceNumber} />
+            <DetailRow label="Buyer" value={selected.buyerCompany} />
+            <DetailRow
+              label="Invoice due"
+              value={selected.invoiceDueAt ? formatDateTime(selected.invoiceDueAt) : null}
+            />
+            <DetailRow
+              label="Promise date"
+              value={selected.promiseToPayAt ? formatDateTime(selected.promiseToPayAt) : null}
+            />
+            <DetailRow label="Promise note" value={selected.promiseNote} />
+            <DetailRow
+              label="Next action"
+              value={selected.nextActionAt ? formatDateTime(selected.nextActionAt) : null}
+            />
+            <DetailRow
+              label="Retry step"
+              value={
+                selected.caseSource === "MANDATE_RETRY"
+                  ? `#${(selected.retrySequenceIndex ?? 0) + 1}`
+                  : null
+              }
+            />
+          </dl>
+        </Section>
+      )}
 
       {selected.status === "RECOVERED" && (
         <div className="rounded-xl border border-recovery/30 bg-recovery-muted/50 px-4 py-3 text-center">
@@ -320,6 +370,29 @@ export function CaseDetailContent({
           Simulate payment.captured
         </Button>
       )}
+
+      <div className="flex flex-col gap-2">
+        {canPromise && onSetPromise && (
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={busy}
+            onClick={() => onSetPromise(selected.id)}
+          >
+            Set promise-to-pay (+1 day)
+          </Button>
+        )}
+        {canTick && onSchedulerTick && (
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={busy}
+            onClick={() => onSchedulerTick(selected.id)}
+          >
+            Run scheduler tick (chase / retry / remind)
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -330,6 +403,8 @@ type CaseDetailDrawerProps = {
   busy: boolean;
   onClose: () => void;
   onSimulateCapture: (caseId: string) => void;
+  onSetPromise?: (caseId: string) => void;
+  onSchedulerTick?: (caseId: string) => void;
 };
 
 export function CaseDetailDrawer({
@@ -338,6 +413,8 @@ export function CaseDetailDrawer({
   busy,
   onClose,
   onSimulateCapture,
+  onSetPromise,
+  onSchedulerTick,
 }: CaseDetailDrawerProps) {
   useEffect(() => {
     if (!open) return;
@@ -382,6 +459,8 @@ export function CaseDetailDrawer({
             selected={selected}
             busy={busy}
             onSimulateCapture={onSimulateCapture}
+            onSetPromise={onSetPromise}
+            onSchedulerTick={onSchedulerTick}
           />
         </div>
       </aside>

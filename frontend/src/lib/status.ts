@@ -8,6 +8,8 @@ const STATUS_LABELS: Record<string, string> = {
   REJECTED: "Rejected",
   EXECUTING: "Executing",
   WAITING_FOR_WEBHOOK: "Awaiting payment",
+  WAITING_PROMISE: "Promise to pay",
+  WAITING_RETRY: "Retry scheduled",
   RECOVERED: "Recovered",
   FAILED: "Failed",
   ESCALATED: "Escalated",
@@ -19,6 +21,8 @@ const statusVariantMap: Record<
 > = {
   RECOVERED: "recovery",
   WAITING_FOR_WEBHOOK: "default",
+  WAITING_PROMISE: "default",
+  WAITING_RETRY: "default",
   EXECUTING: "default",
   APPROVED: "default",
   ESCALATED: "escalate",
@@ -48,6 +52,9 @@ export function formatCaseSummary(caseItem: {
 export function formatFilterLabel(filter: string) {
   if (filter === "ALL") return "All";
   if (filter === "WAITING_FOR_WEBHOOK") return "Awaiting";
+  if (filter === "WAITING_PROMISE") return "Promise";
+  if (filter === "WAITING_RETRY") return "Retry seq";
   if (filter === "ASSIGNED") return "My assigned";
+  if (filter === "B2B") return "Receivables";
   return formatStatusLabel(filter);
 }

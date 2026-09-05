@@ -34,13 +34,16 @@ export async function executeRecoveryAction(params: {
     if (
       action === "PAYMENT_LINK" ||
       action === "RETRY_PAYMENT" ||
-      action === "METHOD_UPDATE"
+      action === "METHOD_UPDATE" ||
+      action === "REMINDER"
     ) {
       const description =
         action === "METHOD_UPDATE"
           ? `RakshaPay: update payment method & pay (case ${recoveryCaseId})`
           : action === "RETRY_PAYMENT"
             ? `RakshaPay: retry via recovery payment link (case ${recoveryCaseId})`
+            : action === "REMINDER"
+              ? `RakshaPay: invoice / receivable reminder (case ${recoveryCaseId})`
             : `RakshaPay: recovery payment link (case ${recoveryCaseId})`;
 
       const recoveryCase = await prisma.recoveryCase.findUnique({

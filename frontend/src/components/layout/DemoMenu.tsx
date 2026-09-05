@@ -31,6 +31,24 @@ const DEMO_OPTIONS: {
     accent: "neutral",
   },
   {
+    scenario: "mandate_retry",
+    label: "Mandate sequencer",
+    hint: "Retry day 1 → 3 → 7 then stop",
+    accent: "neutral",
+  },
+  {
+    scenario: "b2b_invoice",
+    label: "B2B receivable",
+    hint: "Overdue invoice → reminders → escalate",
+    accent: "escalate",
+  },
+  {
+    scenario: "promise_to_pay",
+    label: "Promise-to-pay",
+    hint: "Customer promise date → chase when due",
+    accent: "neutral",
+  },
+  {
     scenario: "escalate",
     label: "Escalate ₹30,000",
     hint: "Human review threshold",

@@ -5,6 +5,13 @@ import { writeAudit } from "../audit/audit.service.js";
 import { LOYAL_DEMO_EMAIL } from "../customers/customer.context.js";
 import { executeRecoveryAction } from "../recovery/recovery.executor.js";
 import { startRecoveryWorkflow } from "../workflows/recovery.workflow.js";
+import {
+  createB2BInvoiceCase,
+  createMandateRetryCase,
+  listDueActions,
+  processDueActions,
+  setPromiseToPay,
+} from "../recovery/sequencer.service.js";
 import type { RecoveryActionType } from "@prisma/client";
 
 export const WRITE_TOOLS = new Set([
@@ -18,6 +25,8 @@ export const WRITE_TOOLS = new Set([
   "reassign_case",
   "unassign_case",
   "bulk_review",
+  "set_promise_to_pay",
+  "run_scheduler_tick",
 ]);
 
 /** Soft UI directives — executed by the dashboard, no DB write confirm needed */
@@ -42,6 +51,14 @@ function formatCaseBrief(c: {
   recoveredAmount: number;
   createdAt: Date;
   assignedTo?: string | null;
+  caseSource?: string | null;
+  promiseToPayAt?: Date | null;
+  promiseNote?: string | null;
+  nextActionAt?: Date | null;
+  retrySequenceIndex?: number | null;
+  invoiceNumber?: string | null;
+  buyerCompany?: string | null;
+  invoiceDueAt?: Date | null;
   decisions?: { agent: string; diagnosis: string | null; recommendedAction: string | null; reason: string | null; rawJson: unknown }[];
   customer?: { name: string | null; email: string | null; phone: string | null } | null;
 }) {
@@ -58,12 +75,20 @@ function formatCaseBrief(c: {
   return {
     id: c.id,
     status: c.status,
+    caseSource: c.caseSource ?? "PAYMENT_FAILED",
     amountInr: c.amount / 100,
     recoveredInr: c.recoveredAmount / 100,
     diagnosis: c.diagnosis,
     recommendedAction: c.recommendedAction,
     failureReason: c.failureReason,
     assignedTo: c.assignedTo ?? null,
+    promiseToPayAt: c.promiseToPayAt?.toISOString() ?? null,
+    promiseNote: c.promiseNote ?? null,
+    nextActionAt: c.nextActionAt?.toISOString() ?? null,
+    retrySequenceIndex: c.retrySequenceIndex ?? 0,
+    invoiceNumber: c.invoiceNumber ?? null,
+    buyerCompany: c.buyerCompany ?? null,
+    invoiceDueAt: c.invoiceDueAt?.toISOString() ?? null,
     aiSource,
     customer: c.customer
       ? {
@@ -213,8 +238,10 @@ export async function getPolicy() {
   if (!p) {
     return {
       maxRetries: 2,
+      retryScheduleDays: "1,3,7",
       maxRecoveryAmount: 50000,
       requireHumanAbove: 25000,
+      maxInvoiceReminders: 3,
       allowPaymentLink: true,
       notifyCustomerSms: true,
       notifyCustomerEmail: true,
@@ -222,8 +249,10 @@ export async function getPolicy() {
   }
   return {
     maxRetries: p.maxRetries,
+    retryScheduleDays: p.retryScheduleDays,
     maxRecoveryAmount: p.maxRecoveryAmount,
     requireHumanAbove: p.requireHumanAbove,
+    maxInvoiceReminders: p.maxInvoiceReminders,
     allowPaymentLink: p.allowPaymentLink,
     notifyCustomerSms: p.notifyCustomerSms,
     notifyCustomerEmail: p.notifyCustomerEmail,
@@ -594,6 +623,108 @@ export async function reviewCase(args: Record<string, unknown>) {
 
 export async function runDemo(args: Record<string, unknown>) {
   const scenario = String(args.scenario ?? "escalate").trim() || "escalate";
+
+  if (scenario === "mandate_retry" || scenario === "b2b_invoice" || scenario === "promise_to_pay") {
+    const summary =
+      scenario === "mandate_retry"
+        ? "Run demo: mandate retry sequencer (day 1→3→7)"
+        : scenario === "b2b_invoice"
+          ? "Run demo: B2B overdue invoice receivable"
+          : "Run demo: promise-to-pay tracker";
+    const pending = needsConfirm("run_demo", { ...args, scenario }, summary, { scenario });
+    if (pending) return pending;
+
+    // Delegate to sequencer helpers
+    const email = (process.env.MERCHANT_EMAIL ?? "demo@rakshapay.com").trim().toLowerCase();
+    const merchant = await prisma.merchant.upsert({
+      where: { email },
+      update: {},
+      create: {
+        name: process.env.MERCHANT_NAME || "Demo Merchant",
+        email,
+        policies: {
+          create: {
+            name: "default",
+            maxRetries: 3,
+            retryScheduleDays: "1,3,7",
+            maxRecoveryAmount: 50000,
+            requireHumanAbove: 25000,
+            allowPaymentLink: true,
+            maxInvoiceReminders: 3,
+            notifyCustomerSms: true,
+            notifyCustomerEmail: true,
+          },
+        },
+      },
+    });
+
+    if (scenario === "mandate_retry") {
+      const c = await createMandateRetryCase({ merchantId: merchant.id, amountInr: 1499 });
+      const full = await prisma.recoveryCase.findUnique({ where: { id: c.id }, include: caseInclude });
+      return { ok: true, scenario, case: full ? formatCaseBrief(full) : null, message: summary };
+    }
+    if (scenario === "b2b_invoice") {
+      const c = await createB2BInvoiceCase({
+        merchantId: merchant.id,
+        amountInr: 85000,
+        buyerCompany: "Acme Traders Pvt Ltd",
+        invoiceNumber: `INV-DEMO-${Date.now().toString().slice(-6)}`,
+        buyerEmail: "accounts@acmetraders.demo",
+        dueDaysAgo: 21,
+      });
+      const full = await prisma.recoveryCase.findUnique({ where: { id: c.id }, include: caseInclude });
+      return { ok: true, scenario, case: full ? formatCaseBrief(full) : null, message: summary };
+    }
+
+    // promise_to_pay via recoverable + setPromise
+    const suffix = `${Date.now()}`;
+    const paymentId = `pay_asst_ptp_${suffix}`;
+    const failPayload = {
+      event: "payment.failed",
+      id: `evt_asst_ptp_${suffix}`,
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId,
+            amount: 249900,
+            currency: "INR",
+            status: "failed",
+            method: "card",
+            error_reason: "insufficient funds",
+            email: LOYAL_DEMO_EMAIL,
+            contact: "+919876543210",
+          },
+        },
+      },
+    };
+    const stored = await prisma.webhookEvent.create({
+      data: { eventId: failPayload.id, eventType: failPayload.event, payload: failPayload as object },
+    });
+    await startRecoveryWorkflow({ webhookEventId: stored.id, payload: failPayload });
+    await prisma.webhookEvent.update({
+      where: { id: stored.id },
+      data: { processed: true, processedAt: new Date() },
+    });
+    const created = await prisma.recoveryCase.findFirst({
+      where: { payment: { razorpayPaymentId: paymentId } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (created) {
+      const promiseAt = new Date();
+      promiseAt.setUTCDate(promiseAt.getUTCDate() + 1);
+      await setPromiseToPay({
+        caseId: created.id,
+        promiseToPayAt: promiseAt,
+        note: "Customer promised tomorrow (assistant demo)",
+        setBy: "assistant",
+      });
+    }
+    const full = created
+      ? await prisma.recoveryCase.findUnique({ where: { id: created.id }, include: caseInclude })
+      : null;
+    return { ok: true, scenario, case: full ? formatCaseBrief(full) : null, message: summary };
+  }
+
   const presets: Record<string, { amountInr: number; failureReason: string; label: string; email?: string }> = {
     recoverable: {
       amountInr: 2499,
@@ -697,14 +828,25 @@ export async function updatePolicy(args: Record<string, unknown>) {
         merchantId: merchant.id,
         name: "default",
         maxRetries: 2,
+        retryScheduleDays: "1,3,7",
         maxRecoveryAmount: 50000,
         requireHumanAbove: 25000,
+        maxInvoiceReminders: 3,
         allowPaymentLink: true,
         notifyCustomerSms: true,
         notifyCustomerEmail: true,
       },
     });
   }
+
+  const retryScheduleDays =
+    args.retryScheduleDays != null
+      ? String(args.retryScheduleDays)
+          .split(",")
+          .map((s) => Number(s.trim()))
+          .filter((n) => Number.isFinite(n) && n >= 0)
+          .join(",") || policy.retryScheduleDays
+      : policy.retryScheduleDays;
 
   const next = {
     maxRetries:
@@ -729,6 +871,11 @@ export async function updatePolicy(args: Record<string, unknown>) {
       args.notifyCustomerEmail != null
         ? Boolean(args.notifyCustomerEmail)
         : policy.notifyCustomerEmail,
+    retryScheduleDays,
+    maxInvoiceReminders:
+      args.maxInvoiceReminders != null
+        ? Number(args.maxInvoiceReminders)
+        : policy.maxInvoiceReminders,
   };
 
   if (!Number.isInteger(next.maxRetries) || next.maxRetries < 0 || next.maxRetries > 10) {
@@ -740,8 +887,15 @@ export async function updatePolicy(args: Record<string, unknown>) {
   if (next.requireHumanAbove >= next.maxRecoveryAmount) {
     return { error: "requireHumanAbove must be lower than maxRecoveryAmount" };
   }
+  if (
+    !Number.isInteger(next.maxInvoiceReminders) ||
+    next.maxInvoiceReminders < 1 ||
+    next.maxInvoiceReminders > 10
+  ) {
+    return { error: "maxInvoiceReminders must be 1–10" };
+  }
 
-  const summary = `Update policy → human>₹${next.requireHumanAbove.toLocaleString("en-IN")}, reject>₹${next.maxRecoveryAmount.toLocaleString("en-IN")}, retries=${next.maxRetries}`;
+  const summary = `Update policy → human>₹${next.requireHumanAbove.toLocaleString("en-IN")}, reject>₹${next.maxRecoveryAmount.toLocaleString("en-IN")}, retries=${next.maxRetries}, schedule=${next.retryScheduleDays}, invoiceReminders=${next.maxInvoiceReminders}`;
   const pending = needsConfirm("update_policy", { ...args, ...next }, summary, next);
   if (pending) return pending;
 
@@ -754,13 +908,63 @@ export async function updatePolicy(args: Record<string, unknown>) {
     ok: true,
     policy: {
       maxRetries: updated.maxRetries,
+      retryScheduleDays: updated.retryScheduleDays,
       maxRecoveryAmount: updated.maxRecoveryAmount,
       requireHumanAbove: updated.requireHumanAbove,
+      maxInvoiceReminders: updated.maxInvoiceReminders,
       allowPaymentLink: updated.allowPaymentLink,
       notifyCustomerSms: updated.notifyCustomerSms,
       notifyCustomerEmail: updated.notifyCustomerEmail,
     },
     message: summary,
+  };
+}
+
+export async function setPromiseToPayTool(args: Record<string, unknown>) {
+  const caseId = String(args.caseId ?? "").trim();
+  const dateRaw = String(args.promiseToPayAt ?? "").trim();
+  const note = typeof args.note === "string" ? args.note.trim() : undefined;
+  if (!caseId) return { error: "caseId required" };
+  if (!dateRaw) return { error: "promiseToPayAt required (ISO date)" };
+  const promiseToPayAt = new Date(dateRaw);
+  if (Number.isNaN(promiseToPayAt.getTime())) return { error: "Invalid promiseToPayAt" };
+
+  const recoveryCase = await resolveCase(caseId);
+  if (!recoveryCase) return { error: `Case not found: ${caseId}` };
+
+  const summary = `Set promise-to-pay on …${recoveryCase.id.slice(-8)} → ${promiseToPayAt.toISOString().slice(0, 10)}`;
+  const pending = needsConfirm(
+    "set_promise_to_pay",
+    { caseId: recoveryCase.id, promiseToPayAt: promiseToPayAt.toISOString(), note },
+    summary,
+    { caseId: recoveryCase.id, promiseToPayAt: promiseToPayAt.toISOString() }
+  );
+  if (pending) return pending;
+
+  return setPromiseToPay({
+    caseId: recoveryCase.id,
+    promiseToPayAt,
+    note,
+    setBy: "assistant",
+  });
+}
+
+export async function runSchedulerTickTool(args: Record<string, unknown>) {
+  const forceCaseId =
+    typeof args.forceCaseId === "string" ? args.forceCaseId.trim() : undefined;
+  const summary = forceCaseId
+    ? `Run scheduler tick for case …${forceCaseId.slice(-8)}`
+    : "Run scheduler tick for all due PTP / mandate / B2B actions";
+  const pending = needsConfirm("run_scheduler_tick", { ...args, forceCaseId }, summary, {
+    forceCaseId: forceCaseId ?? null,
+  });
+  if (pending) return pending;
+
+  const result = await processDueActions({ forceCaseId, limit: 20 });
+  return {
+    ok: true,
+    ...result,
+    message: `Scheduler processed ${result.processed} action(s)`,
   };
 }
 
@@ -1241,7 +1445,7 @@ export const ASSISTANT_TOOL_DECLARATIONS = [
   {
     name: "run_demo",
     description:
-      "Trigger a demo payment.failed scenario: recoverable | escalate | reject | full_recovery | abandoned. Requires confirmed=true.",
+      "Trigger a demo: recoverable | escalate | reject | full_recovery | abandoned | mandate_retry | b2b_invoice | promise_to_pay. Requires confirmed=true.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -1263,6 +1467,40 @@ export const ASSISTANT_TOOL_DECLARATIONS = [
         allowPaymentLink: { type: "BOOLEAN" },
         notifyCustomerSms: { type: "BOOLEAN" },
         notifyCustomerEmail: { type: "BOOLEAN" },
+        retryScheduleDays: { type: "STRING", description: 'e.g. "1,3,7"' },
+        maxInvoiceReminders: { type: "NUMBER" },
+        confirmed: { type: "BOOLEAN" },
+      },
+    },
+  },
+  {
+    name: "list_due_actions",
+    description: "List cases with due promise-to-pay, mandate retries, or B2B reminders.",
+    parameters: { type: "OBJECT", properties: {} },
+  },
+  {
+    name: "set_promise_to_pay",
+    description:
+      "Record a customer promise-to-pay date on a case. Requires confirmed=true. ISO date in promiseToPayAt.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        caseId: { type: "STRING" },
+        promiseToPayAt: { type: "STRING" },
+        note: { type: "STRING" },
+        confirmed: { type: "BOOLEAN" },
+      },
+      required: ["caseId", "promiseToPayAt"],
+    },
+  },
+  {
+    name: "run_scheduler_tick",
+    description:
+      "Process due PTP / mandate / B2B sequencer actions. Optional forceCaseId for demo. Requires confirmed=true.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        forceCaseId: { type: "STRING" },
         confirmed: { type: "BOOLEAN" },
       },
     },
@@ -1412,6 +1650,12 @@ export async function executeAssistantTool(
       return runDemo(args);
     case "update_policy":
       return updatePolicy(args);
+    case "list_due_actions":
+      return listDueActions(25);
+    case "set_promise_to_pay":
+      return setPromiseToPayTool(args);
+    case "run_scheduler_tick":
+      return runSchedulerTickTool(args);
     case "simulate_capture":
       return simulateCapture(args);
     case "resend_payment_link":

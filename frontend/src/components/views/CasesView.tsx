@@ -4,6 +4,7 @@ import {
   ChevronRight,
   ClipboardList,
   Clock,
+  FileText,
   Search,
   ShieldAlert,
   UserCheck,
@@ -33,11 +34,16 @@ type CasesViewProps = {
   onCloseCase: () => void;
   busy: boolean;
   onSimulateCapture: (caseId: string) => void;
+  onSetPromise?: (caseId: string) => void;
+  onSchedulerTick?: (caseId: string) => void;
 };
 
 const FILTERS: { id: StatusFilter; icon: typeof ClipboardList }[] = [
   { id: "ALL", icon: ClipboardList },
   { id: "WAITING_FOR_WEBHOOK", icon: Clock },
+  { id: "WAITING_PROMISE", icon: Clock },
+  { id: "WAITING_RETRY", icon: Clock },
+  { id: "B2B", icon: FileText },
   { id: "RECOVERED", icon: CheckCircle2 },
   { id: "ESCALATED", icon: ShieldAlert },
   { id: "ASSIGNED", icon: UserCheck },
@@ -55,6 +61,8 @@ export function CasesView({
   onCloseCase,
   busy,
   onSimulateCapture,
+  onSetPromise,
+  onSchedulerTick,
 }: CasesViewProps) {
   const [search, setSearch] = useState("");
 
@@ -290,6 +298,8 @@ export function CasesView({
         busy={busy}
         onClose={onCloseCase}
         onSimulateCapture={onSimulateCapture}
+        onSetPromise={onSetPromise}
+        onSchedulerTick={onSchedulerTick}
       />
     </div>
   );
