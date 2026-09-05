@@ -806,6 +806,68 @@ export async function runDemo(args: Record<string, unknown>) {
     include: caseInclude,
   });
 
+  if (scenario === "full_recovery" && recoveryCase) {
+    const executionOk =
+      recoveryCase.status === "WAITING_FOR_WEBHOOK" ||
+      recoveryCase.actions.some(
+        (a) =>
+          a.policyDecision === "APPROVED" &&
+          (a.status === "executed" || a.status === "succeeded") &&
+          !!a.razorpayRefId
+      );
+
+    if (executionOk) {
+      const capturePayload = {
+        event: "payment.captured",
+        id: `evt_asst_capture_${suffix}`,
+        payload: {
+          payment: {
+            entity: {
+              id: `pay_asst_capture_${suffix}`,
+              amount: amountPaise,
+              currency: "INR",
+              status: "captured",
+              method: "card",
+              notes: { recovery_case_id: recoveryCase.id, source: "assistant_demo" },
+            },
+          },
+        },
+      };
+      const captureEvent = await prisma.webhookEvent.create({
+        data: {
+          eventId: capturePayload.id,
+          eventType: capturePayload.event,
+          payload: capturePayload as object,
+        },
+      });
+      await startRecoveryWorkflow({ webhookEventId: captureEvent.id, payload: capturePayload });
+      await prisma.webhookEvent.update({
+        where: { id: captureEvent.id },
+        data: { processed: true, processedAt: new Date() },
+      });
+    } else {
+      await writeAudit({
+        recoveryCaseId: recoveryCase.id,
+        eventType: "demo.capture_fallback",
+        message:
+          "Razorpay execution did not succeed — assistant full_recovery using simulate capture",
+        metadata: { priorStatus: recoveryCase.status },
+      });
+      await simulateCapture({ caseId: recoveryCase.id, confirmed: true, allowFailed: true });
+    }
+
+    const closed = await prisma.recoveryCase.findUnique({
+      where: { id: recoveryCase.id },
+      include: caseInclude,
+    });
+    return {
+      ok: true,
+      scenario,
+      case: closed ? formatCaseBrief(closed) : null,
+      message: summary,
+    };
+  }
+
   return {
     ok: true,
     scenario,
@@ -994,9 +1056,13 @@ export async function listMyAssigned(args: Record<string, unknown>) {
 export async function simulateCapture(args: Record<string, unknown>) {
   const recoveryCase = await resolveCase(String(args.caseId ?? ""));
   if (!recoveryCase) return { error: `Case not found: ${args.caseId}` };
-  if (recoveryCase.status !== "WAITING_FOR_WEBHOOK") {
+  const allowFailed = args.allowFailed === true || args.allowFailed === "true";
+  const allowedStatuses = allowFailed
+    ? ["WAITING_FOR_WEBHOOK", "FAILED", "EXECUTING"]
+    : ["WAITING_FOR_WEBHOOK"];
+  if (!allowedStatuses.includes(recoveryCase.status)) {
     return {
-      error: `Case …${recoveryCase.id.slice(-8)} is ${recoveryCase.status}. Simulate capture only works when status is WAITING_FOR_WEBHOOK.`,
+      error: `Case …${recoveryCase.id.slice(-8)} is ${recoveryCase.status}. Simulate capture only works when status is ${allowedStatuses.join(" / ")}.`,
     };
   }
 
@@ -1011,20 +1077,27 @@ export async function simulateCapture(args: Record<string, unknown>) {
 
   await prisma.recoveryCase.update({
     where: { id: recoveryCase.id },
-    data: { status: "RECOVERED", recoveredAmount: recoveryCase.amount },
+    data: {
+      status: "RECOVERED",
+      recoveredAmount: recoveryCase.amount,
+      nextActionAt: null,
+      promiseToPayAt: null,
+    },
   });
   await prisma.recoveryResult.create({
     data: {
       recoveryCaseId: recoveryCase.id,
       success: true,
       recoveredAmount: recoveryCase.amount,
-      notes: "Simulated payment.captured (assistant)",
+      notes: allowFailed
+        ? "Simulated payment.captured (assistant / execution fallback)"
+        : "Simulated payment.captured (assistant)",
     },
   });
   await prisma.recoveryAction.updateMany({
     where: {
       recoveryCaseId: recoveryCase.id,
-      status: { in: ["executed", "queued", "waiting"] },
+      status: { in: ["executed", "queued", "waiting", "failed"] },
     },
     data: { status: "succeeded" },
   });
@@ -1032,7 +1105,7 @@ export async function simulateCapture(args: Record<string, unknown>) {
     recoveryCaseId: recoveryCase.id,
     eventType: "recovery.confirmed",
     message: `RakshaPay agent simulated recovery of ₹${recoveryCase.amount / 100}`,
-    metadata: { source: "assistant" },
+    metadata: { source: "assistant", allowFailed },
   });
 
   return {

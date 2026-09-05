@@ -29,6 +29,58 @@ const caseInclude = {
   payment: true,
 };
 
+/** Mark a case RECOVERED without a real payment.captured webhook (demo / Razorpay-down fallback). */
+async function applySimulatedCapture(caseId: string, notes: string) {
+  const recoveryCase = await prisma.recoveryCase.findUnique({ where: { id: caseId } });
+  if (!recoveryCase) return null;
+
+  if (recoveryCase.status !== "RECOVERED") {
+    await prisma.recoveryCase.update({
+      where: { id: caseId },
+      data: {
+        status: "RECOVERED",
+        recoveredAmount: recoveryCase.amount,
+        nextActionAt: null,
+        promiseToPayAt: null,
+      },
+    });
+
+    await prisma.recoveryResult.create({
+      data: {
+        recoveryCaseId: caseId,
+        success: true,
+        recoveredAmount: recoveryCase.amount,
+        notes,
+      },
+    });
+
+    await prisma.recoveryAction.updateMany({
+      where: {
+        recoveryCaseId: caseId,
+        status: { in: ["executed", "queued", "waiting", "failed"] },
+      },
+      data: { status: "succeeded" },
+    });
+
+    await writeAudit({
+      recoveryCaseId: caseId,
+      eventType: "recovery.confirmed",
+      message: notes,
+      metadata: { source: "simulate_capture", amountInr: recoveryCase.amount / 100 },
+    });
+  }
+
+  return prisma.recoveryCase.findUnique({
+    where: { id: caseId },
+    include: {
+      decisions: true,
+      actions: true,
+      audits: { orderBy: { createdAt: "asc" as const } },
+      results: true,
+    },
+  });
+}
+
 recoveryRouter.get(
   "/cases",
   asyncHandler(async (_req, res) => {
@@ -338,55 +390,82 @@ recoveryRouter.post(
     },
   });
 
-  // Close the money loop via the real payment.captured verifier path
+  // Close the money loop: real payment.captured only if Razorpay execution succeeded
   if (scenario === "full_recovery" && recoveryCase) {
-    const capturePayload = {
-      event: "payment.captured",
-      id: `evt_demo_capture_${suffix}`,
-      payload: {
-        payment: {
-          entity: {
-            id: `pay_demo_capture_${suffix}`,
-            amount: amountPaise,
-            currency: "INR",
-            status: "captured",
-            method: "card",
-            notes: {
-              recovery_case_id: recoveryCase.id,
-              source: "razorrecover_demo",
+    const afterExec = await prisma.recoveryCase.findUnique({
+      where: { id: recoveryCase.id },
+      include: { actions: true },
+    });
+    const executionOk =
+      afterExec?.status === "WAITING_FOR_WEBHOOK" ||
+      (afterExec?.actions ?? []).some(
+        (a) =>
+          a.policyDecision === "APPROVED" &&
+          (a.status === "executed" || a.status === "succeeded") &&
+          !!a.razorpayRefId
+      );
+
+    if (executionOk) {
+      const capturePayload = {
+        event: "payment.captured",
+        id: `evt_demo_capture_${suffix}`,
+        payload: {
+          payment: {
+            entity: {
+              id: `pay_demo_capture_${suffix}`,
+              amount: amountPaise,
+              currency: "INR",
+              status: "captured",
+              method: "card",
+              notes: {
+                recovery_case_id: recoveryCase.id,
+                source: "razorrecover_demo",
+              },
             },
           },
         },
-      },
-    };
+      };
 
-    const captureEvent = await prisma.webhookEvent.create({
-      data: {
-        eventId: capturePayload.id,
-        eventType: capturePayload.event,
-        payload: capturePayload as object,
-      },
-    });
+      const captureEvent = await prisma.webhookEvent.create({
+        data: {
+          eventId: capturePayload.id,
+          eventType: capturePayload.event,
+          payload: capturePayload as object,
+        },
+      });
 
-    await startRecoveryWorkflow({
-      webhookEventId: captureEvent.id,
-      payload: capturePayload,
-    });
+      await startRecoveryWorkflow({
+        webhookEventId: captureEvent.id,
+        payload: capturePayload,
+      });
 
-    await prisma.webhookEvent.update({
-      where: { id: captureEvent.id },
-      data: { processed: true, processedAt: new Date() },
-    });
+      await prisma.webhookEvent.update({
+        where: { id: captureEvent.id },
+        data: { processed: true, processedAt: new Date() },
+      });
 
-    recoveryCase = await prisma.recoveryCase.findUnique({
-      where: { id: recoveryCase.id },
-      include: {
-        decisions: true,
-        actions: true,
-        audits: { orderBy: { createdAt: "asc" } },
-        results: true,
-      },
-    });
+      recoveryCase = await prisma.recoveryCase.findUnique({
+        where: { id: recoveryCase.id },
+        include: {
+          decisions: true,
+          actions: true,
+          audits: { orderBy: { createdAt: "asc" } },
+          results: true,
+        },
+      });
+    } else {
+      await writeAudit({
+        recoveryCaseId: recoveryCase.id,
+        eventType: "demo.capture_fallback",
+        message:
+          "Razorpay execution did not succeed — closing full_recovery demo via simulate payment.captured",
+        metadata: { priorStatus: afterExec?.status ?? null },
+      });
+      recoveryCase = await applySimulatedCapture(
+        recoveryCase.id,
+        `Simulated payment.captured (full_recovery fallback — Razorpay link failed; prior status ${afterExec?.status ?? "unknown"})`
+      );
+    }
   }
 
   return res.json({
@@ -494,44 +573,16 @@ recoveryRouter.post(
       where: { id },
     });
 
-  if (!recoveryCase) {
-    return res.status(404).json({ error: "Not found" });
-  }
+    if (!recoveryCase) {
+      return res.status(404).json({ error: "Not found" });
+    }
 
-  await prisma.recoveryCase.update({
-    where: { id: recoveryCase.id },
-    data: {
-      status: "RECOVERED",
-      recoveredAmount: recoveryCase.amount,
-      nextActionAt: null,
-      promiseToPayAt: null,
-    },
-  });
+    if (recoveryCase.status === "RECOVERED") {
+      return res.json({ ok: true, recoveredAmount: recoveryCase.recoveredAmount / 100 });
+    }
 
-  await prisma.recoveryResult.create({
-    data: {
-      recoveryCaseId: recoveryCase.id,
-      success: true,
-      recoveredAmount: recoveryCase.amount,
-      notes: "Simulated payment.captured (dev)",
-    },
-  });
-
-  await prisma.recoveryAction.updateMany({
-    where: {
-      recoveryCaseId: recoveryCase.id,
-      status: { in: ["executed", "queued", "waiting"] },
-    },
-    data: { status: "succeeded" },
-  });
-
-  await writeAudit({
-    recoveryCaseId: recoveryCase.id,
-    eventType: "recovery.confirmed",
-    message: `Simulated recovery of ₹${recoveryCase.amount / 100}`,
-  });
-
-  return res.json({ ok: true, recoveredAmount: recoveryCase.amount / 100 });
+    await applySimulatedCapture(id, `Simulated recovery of ₹${recoveryCase.amount / 100}`);
+    return res.json({ ok: true, recoveredAmount: recoveryCase.amount / 100 });
   })
 );
 
