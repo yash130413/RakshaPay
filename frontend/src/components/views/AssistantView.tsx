@@ -35,6 +35,16 @@ type PendingAction = {
   preview?: unknown;
 };
 
+export type AssistantUiAction = {
+  type: "navigate" | "export_audit";
+  tab?: string;
+  filter?: string;
+  assignedOnly?: boolean;
+  caseId?: string;
+  filename?: string;
+  data?: unknown;
+};
+
 type ChatItem = {
   id: string;
   role: ChatRole;
@@ -48,6 +58,7 @@ type AssistantViewProps = {
   onOpenCase?: (caseId: string) => void;
   merchantName?: string;
   onDataChanged?: () => void;
+  onUiAction?: (action: AssistantUiAction) => void;
 };
 
 function uid() {
@@ -81,13 +92,14 @@ export function AssistantView({
   onOpenCase,
   merchantName = "Demo Merchant",
   onDataChanged,
+  onUiAction,
 }: AssistantViewProps) {
   const [messages, setMessages] = useState<ChatItem[]>([
     {
       id: "welcome",
       role: "assistant",
       content:
-        "Hi — I’m **RakshaPay**, your AI revenue recovery agent. I can assign escalated cases, run demos, and update policy — you’ll get Confirm / Cancel before any write. Ask in Hindi or English, or use the mic.",
+        "Hi — I’m **RakshaPay**. I can assign/review cases, simulate capture, resend payment links, update policy, open tabs, filter my assigned, and export audit — write actions need Confirm first.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -156,6 +168,25 @@ export function AssistantView({
     return null;
   }
 
+  function applyUiActions(actions: AssistantUiAction[] | undefined) {
+    if (!actions?.length) return;
+    for (const action of actions) {
+      if (action.type === "export_audit") {
+        const filename = action.filename || `audit-trail-${new Date().toISOString().slice(0, 10)}.json`;
+        const dataStr =
+          "data:text/json;charset=utf-8," +
+          encodeURIComponent(JSON.stringify(action.data ?? [], null, 2));
+        const a = document.createElement("a");
+        a.setAttribute("href", dataStr);
+        a.setAttribute("download", filename);
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      onUiAction?.(action);
+    }
+  }
+
   async function executePending(actions: PendingAction[], lang: "hi-IN" | "en-IN") {
     const replies: string[] = [];
     let anyOk = false;
@@ -163,12 +194,17 @@ export function AssistantView({
     for (const action of actions) {
       const args = { ...action.args };
       if (
-        (action.tool === "assign_case" || action.tool === "assign_all_unassigned_escalated") &&
+        (action.tool === "assign_case" ||
+          action.tool === "assign_all_unassigned_escalated" ||
+          action.tool === "reassign_case") &&
         !args.assignedTo
       ) {
         args.assignedTo = merchantName;
       }
-      if (action.tool === "review_case" && !args.reviewedBy) {
+      if (
+        (action.tool === "review_case" || action.tool === "bulk_review") &&
+        !args.reviewedBy
+      ) {
         args.reviewedBy = merchantName;
       }
 
@@ -183,9 +219,11 @@ export function AssistantView({
       }
       if (data.ok) anyOk = true;
       replies.push(String(data.reply ?? (data.ok ? "Done." : "Failed.")));
+      if (Array.isArray(data.uiActions)) applyUiActions(data.uiActions);
     }
 
     if (anyOk) onDataChanged?.();
+    void lang;
     return replies.join("\n");
   }
 
@@ -291,6 +329,8 @@ export function AssistantView({
       const pendingActions: PendingAction[] = Array.isArray(data.pendingActions)
         ? data.pendingActions
         : [];
+
+      if (Array.isArray(data.uiActions)) applyUiActions(data.uiActions);
 
       const assistantMsg: ChatItem = {
         id: uid(),

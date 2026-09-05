@@ -48,5 +48,6 @@ export function formatCaseSummary(caseItem: {
 export function formatFilterLabel(filter: string) {
   if (filter === "ALL") return "All";
   if (filter === "WAITING_FOR_WEBHOOK") return "Awaiting";
+  if (filter === "ASSIGNED") return "My assigned";
   return formatStatusLabel(filter);
 }

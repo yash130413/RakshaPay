@@ -155,7 +155,13 @@ export type MerchantPolicy = {
   updatedAt: string;
 };
 
-export type StatusFilter = "ALL" | "WAITING_FOR_WEBHOOK" | "RECOVERED" | "ESCALATED" | "REJECTED";
+export type StatusFilter =
+  | "ALL"
+  | "WAITING_FOR_WEBHOOK"
+  | "RECOVERED"
+  | "ESCALATED"
+  | "REJECTED"
+  | "ASSIGNED";
 
 export type DashboardTab =
   | "overview"

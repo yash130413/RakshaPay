@@ -24,6 +24,23 @@ export type AssistantCaseCard = {
   customerEmail?: string | null;
 };
 
+export type PendingAction = {
+  tool: string;
+  args: Record<string, unknown>;
+  summary: string;
+  preview?: unknown;
+};
+
+export type UiAction = {
+  type: "navigate" | "export_audit";
+  tab?: string;
+  filter?: string;
+  assignedOnly?: boolean;
+  caseId?: string;
+  filename?: string;
+  data?: unknown;
+};
+
 export type AssistantChatResult = {
   reply: string;
   cases: AssistantCaseCard[];
@@ -31,13 +48,7 @@ export type AssistantChatResult = {
   model: string | null;
   toolsUsed: string[];
   pendingActions?: PendingAction[];
-};
-
-export type PendingAction = {
-  tool: string;
-  args: Record<string, unknown>;
-  summary: string;
-  preview?: unknown;
+  uiActions?: UiAction[];
 };
 
 const TOOL_CATALOG = ASSISTANT_TOOL_DECLARATIONS.map((t) => {
@@ -63,15 +74,24 @@ Product knowledge:
 - Prefer: assign cases to the merchant, then tell them to open Review and Approve. Only call review_case approve/reject if they explicitly ask you to approve/reject.
 
 Actions you can take (tools):
-- Read: get_dashboard_summary, list_cases, list_unassigned_escalated, get_case_detail, get_policy, get_audit_events, simulate_policy, get_research_metrics
-- Write (MUST request confirmation first by calling WITHOUT confirmed=true): assign_case, assign_all_unassigned_escalated, review_case, run_demo, update_policy
+- Read: get_dashboard_summary, list_cases, list_unassigned_escalated, list_my_assigned, get_case_detail, get_policy, get_audit_events, simulate_policy, get_research_metrics, export_audit
+- UI (instant, no confirm): navigate_ui (open Cases/Review/Audit/etc; filter=ASSIGNED for my assigned)
+- Write (MUST request confirmation first by calling WITHOUT confirmed=true): assign_case, assign_all_unassigned_escalated, review_case, bulk_review, reassign_case, unassign_case, run_demo, update_policy, simulate_capture, resend_payment_link
 - When a write tool returns needsConfirmation=true, explain the plan briefly and tell the merchant to press Confirm in the UI (or say "confirm"). Do NOT claim the action already happened.
 - After confirmation, the UI will execute with confirmed=true.
+- Prefer assign → human Approves on Review. Use bulk_review / review_case only if they explicitly ask.
+- Notify SMS/Email toggles → update_policy notifyCustomerSms / notifyCustomerEmail.
 
 Common intents:
 - "assign escalated cases to me" → list_unassigned_escalated then assign_all_unassigned_escalated
+- "show my assigned" → list_my_assigned then navigate_ui tab=cases filter=ASSIGNED (or review)
+- "open review" → navigate_ui tab=review
+- "simulate capture on case X" → simulate_capture
+- "resend payment link" → resend_payment_link
+- "export audit" → export_audit
 - "run escalate demo" → run_demo scenario=escalate
 - "raise human threshold to 40000" → update_policy requireHumanAbove=40000
+- "turn off SMS notify" → update_policy notifyCustomerSms=false
 
 Tool protocol (critical — no native function roles):
 - If you need data or want to propose an action, reply with ONLY JSON:
@@ -126,8 +146,19 @@ function extractCaseCards(toolResults: unknown[]): AssistantCaseCard[] {
           push(row as Record<string, unknown>);
         }
       }
-    } else if (result && typeof result === "object" && "id" in result && "status" in result) {
-      push(result as Record<string, unknown>);
+    } else if (result && typeof result === "object") {
+      const obj = result as Record<string, unknown>;
+      if ("id" in obj && "status" in obj) push(obj);
+      if (Array.isArray(obj.cases)) {
+        for (const row of obj.cases) {
+          if (row && typeof row === "object" && "id" in row && "status" in row) {
+            push(row as Record<string, unknown>);
+          }
+        }
+      }
+      if (obj.case && typeof obj.case === "object" && "id" in (obj.case as object)) {
+        push(obj.case as Record<string, unknown>);
+      }
     }
   }
 
@@ -326,6 +357,7 @@ export async function runAssistantChat(params: {
     const toolsUsed: string[] = [];
     const toolPayloads: unknown[] = [];
     const pendingActions: PendingAction[] = [];
+    const uiActions: UiAction[] = [];
 
     let result = await chat.sendMessage(message);
     let text = result.response.text()?.trim() ?? "";
@@ -343,12 +375,21 @@ export async function runAssistantChat(params: {
         if (
           WRITE_TOOLS.has(call.name) &&
           !enrichedArgs.assignedTo &&
-          (call.name === "assign_case" || call.name === "assign_all_unassigned_escalated")
+          (call.name === "assign_case" ||
+            call.name === "assign_all_unassigned_escalated" ||
+            call.name === "reassign_case" ||
+            call.name === "list_my_assigned")
         ) {
           enrichedArgs.assignedTo = merchantName;
         }
-        if (call.name === "review_case" && !enrichedArgs.reviewedBy) {
+        if (
+          (call.name === "review_case" || call.name === "bulk_review") &&
+          !enrichedArgs.reviewedBy
+        ) {
           enrichedArgs.reviewedBy = merchantName;
+        }
+        if (call.name === "list_my_assigned" && !enrichedArgs.assignedTo) {
+          enrichedArgs.assignedTo = merchantName;
         }
         const output = await executeAssistantTool(call.name, enrichedArgs);
         toolPayloads.push(output);
@@ -371,6 +412,14 @@ export async function runAssistantChat(params: {
             summary: p.summary,
             preview: p.preview,
           });
+        }
+
+        if (
+          output &&
+          typeof output === "object" &&
+          (output as { uiAction?: UiAction }).uiAction
+        ) {
+          uiActions.push((output as { uiAction: UiAction }).uiAction);
         }
       }
 
@@ -436,6 +485,7 @@ export async function runAssistantChat(params: {
       model: modelName(),
       toolsUsed: [...new Set(toolsUsed)],
       pendingActions: pendingActions.length ? pendingActions : undefined,
+      uiActions: uiActions.length ? uiActions : undefined,
     };
   } catch (err) {
     console.warn("Assistant Gemini path failed — using live-data fallback:", err);
@@ -447,7 +497,7 @@ export async function runAssistantChat(params: {
 export async function confirmAssistantAction(params: {
   tool: string;
   args: Record<string, unknown>;
-}): Promise<{ ok: boolean; result: unknown; reply: string }> {
+}): Promise<{ ok: boolean; result: unknown; reply: string; uiActions?: UiAction[] }> {
   const tool = String(params.tool ?? "").trim();
   const args = { ...(params.args ?? {}), confirmed: true };
   const result = await executeAssistantTool(tool, args);
@@ -462,11 +512,17 @@ export async function confirmAssistantAction(params: {
       ? String((result as { message?: string }).message ?? "")
       : "";
 
+  const uiAction =
+    result && typeof result === "object"
+      ? (result as { uiAction?: UiAction }).uiAction
+      : undefined;
+
   return {
     ok,
     result,
     reply: ok
       ? message || `Done: ${tool}`
       : String((result as { error?: string })?.error ?? `Could not complete ${tool}`),
+    uiActions: uiAction ? [uiAction] : undefined,
   };
 }

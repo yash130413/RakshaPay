@@ -6,6 +6,7 @@ import {
   Clock,
   Search,
   ShieldAlert,
+  UserCheck,
   Wallet,
   XCircle,
 } from "lucide-react";
@@ -39,6 +40,7 @@ const FILTERS: { id: StatusFilter; icon: typeof ClipboardList }[] = [
   { id: "WAITING_FOR_WEBHOOK", icon: Clock },
   { id: "RECOVERED", icon: CheckCircle2 },
   { id: "ESCALATED", icon: ShieldAlert },
+  { id: "ASSIGNED", icon: UserCheck },
   { id: "REJECTED", icon: XCircle },
 ];
 

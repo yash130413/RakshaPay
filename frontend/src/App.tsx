@@ -126,6 +126,9 @@ export default function App() {
 
   const filteredCases = useMemo(() => {
     if (filter === "ALL") return cases;
+    if (filter === "ASSIGNED") {
+      return cases.filter((c) => !!c.assignedTo && c.status === "ESCALATED");
+    }
     return cases.filter((c) => c.status === filter);
   }, [cases, filter]);
 
@@ -304,6 +307,44 @@ export default function App() {
             onOpenCase={(caseId) => {
               setSelectedId(caseId);
               setActiveTab("cases");
+            }}
+            onUiAction={(action) => {
+              if (action.type !== "navigate") return;
+              const tab = String(action.tab ?? "").toLowerCase() as DashboardTab;
+              const tabs: DashboardTab[] = [
+                "overview",
+                "cases",
+                "review",
+                "audit",
+                "assistant",
+                "evaluation",
+                "settings",
+              ];
+              if (tabs.includes(tab)) setActiveTab(tab);
+
+              if (action.assignedOnly || action.filter === "ASSIGNED") {
+                setFilter("ASSIGNED");
+                if (!tabs.includes(tab) || tab === "assistant") setActiveTab("cases");
+              } else if (action.filter) {
+                const f = action.filter.toUpperCase() as StatusFilter;
+                const filters: StatusFilter[] = [
+                  "ALL",
+                  "WAITING_FOR_WEBHOOK",
+                  "RECOVERED",
+                  "ESCALATED",
+                  "REJECTED",
+                  "ASSIGNED",
+                ];
+                if (filters.includes(f)) {
+                  setFilter(f);
+                  if (tab === "cases" || !action.tab) setActiveTab("cases");
+                }
+              }
+
+              if (action.caseId) {
+                setSelectedId(action.caseId);
+                if (tab !== "review") setActiveTab("cases");
+              }
             }}
           />
         );

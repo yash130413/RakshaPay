@@ -13,7 +13,15 @@ export const WRITE_TOOLS = new Set([
   "review_case",
   "run_demo",
   "update_policy",
+  "simulate_capture",
+  "resend_payment_link",
+  "reassign_case",
+  "unassign_case",
+  "bulk_review",
 ]);
+
+/** Soft UI directives — executed by the dashboard, no DB write confirm needed */
+export const UI_TOOLS = new Set(["navigate_ui", "export_audit"]);
 
 const caseInclude = {
   decisions: { orderBy: { createdAt: "asc" as const } },
@@ -756,6 +764,365 @@ export async function updatePolicy(args: Record<string, unknown>) {
   };
 }
 
+export async function listMyAssigned(args: Record<string, unknown>) {
+  const assignedTo =
+    String(args.assignedTo ?? "").trim() ||
+    process.env.MERCHANT_NAME ||
+    "Demo Merchant";
+  const needle = assignedTo.toLowerCase();
+  const cases = await prisma.recoveryCase.findMany({
+    where: {
+      status: "ESCALATED",
+      assignedTo: { not: null },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 50,
+    include: caseInclude,
+  });
+  const mine = cases.filter((c) => (c.assignedTo ?? "").toLowerCase() === needle);
+  return {
+    assignedTo,
+    count: mine.length,
+    cases: mine.slice(0, 25).map((c) => ({ ...formatCaseBrief(c), assignedTo: c.assignedTo })),
+  };
+}
+
+export async function simulateCapture(args: Record<string, unknown>) {
+  const recoveryCase = await resolveCase(String(args.caseId ?? ""));
+  if (!recoveryCase) return { error: `Case not found: ${args.caseId}` };
+  if (recoveryCase.status !== "WAITING_FOR_WEBHOOK") {
+    return {
+      error: `Case …${recoveryCase.id.slice(-8)} is ${recoveryCase.status}. Simulate capture only works when status is WAITING_FOR_WEBHOOK.`,
+    };
+  }
+
+  const summary = `Simulate payment.captured → mark …${recoveryCase.id.slice(-8)} RECOVERED (₹${recoveryCase.amount / 100})`;
+  const pending = needsConfirm(
+    "simulate_capture",
+    { ...args, caseId: recoveryCase.id },
+    summary,
+    { caseId: recoveryCase.id, amountInr: recoveryCase.amount / 100 }
+  );
+  if (pending) return pending;
+
+  await prisma.recoveryCase.update({
+    where: { id: recoveryCase.id },
+    data: { status: "RECOVERED", recoveredAmount: recoveryCase.amount },
+  });
+  await prisma.recoveryResult.create({
+    data: {
+      recoveryCaseId: recoveryCase.id,
+      success: true,
+      recoveredAmount: recoveryCase.amount,
+      notes: "Simulated payment.captured (assistant)",
+    },
+  });
+  await prisma.recoveryAction.updateMany({
+    where: {
+      recoveryCaseId: recoveryCase.id,
+      status: { in: ["executed", "queued", "waiting"] },
+    },
+    data: { status: "succeeded" },
+  });
+  await writeAudit({
+    recoveryCaseId: recoveryCase.id,
+    eventType: "recovery.confirmed",
+    message: `RakshaPay agent simulated recovery of ₹${recoveryCase.amount / 100}`,
+    metadata: { source: "assistant" },
+  });
+
+  return {
+    ok: true,
+    caseId: recoveryCase.id,
+    recoveredAmount: recoveryCase.amount / 100,
+    message: summary,
+  };
+}
+
+export async function resendPaymentLink(args: Record<string, unknown>) {
+  const recoveryCase = await resolveCase(String(args.caseId ?? ""));
+  if (!recoveryCase) return { error: `Case not found: ${args.caseId}` };
+
+  const allowed = ["WAITING_FOR_WEBHOOK", "FAILED", "EXECUTING"];
+  if (!allowed.includes(recoveryCase.status)) {
+    return {
+      error: `Cannot resend link for status ${recoveryCase.status}. Need WAITING_FOR_WEBHOOK / FAILED.`,
+    };
+  }
+
+  const summary = `Resend recovery payment link for …${recoveryCase.id.slice(-8)} (₹${recoveryCase.amount / 100}) — SMS/Email per policy`;
+  const pending = needsConfirm(
+    "resend_payment_link",
+    { ...args, caseId: recoveryCase.id },
+    summary,
+    { caseId: recoveryCase.id, status: recoveryCase.status }
+  );
+  if (pending) return pending;
+
+  const execAction: RecoveryActionType =
+    recoveryCase.recommendedAction &&
+    recoveryCase.recommendedAction !== "STOP" &&
+    recoveryCase.recommendedAction !== "HUMAN_ESCALATION"
+      ? (recoveryCase.recommendedAction as RecoveryActionType)
+      : "PAYMENT_LINK";
+
+  const execution = await executeRecoveryAction({
+    recoveryCaseId: recoveryCase.id,
+    action: execAction,
+    amountPaise: recoveryCase.amount,
+    currency: recoveryCase.currency,
+    customer: {
+      name: recoveryCase.customer?.name ?? undefined,
+      email: recoveryCase.customer?.email ?? undefined,
+      contact: recoveryCase.customer?.phone ?? undefined,
+    },
+  });
+
+  await prisma.recoveryAction.create({
+    data: {
+      recoveryCaseId: recoveryCase.id,
+      actionType: execAction,
+      policyDecision: "APPROVED",
+      status: execution.status,
+      razorpayRefId: execution.razorpayRefId,
+      metadata: {
+        message: execution.message,
+        shortUrl: execution.shortUrl,
+        resend: true,
+        source: "assistant",
+        ...(execution.metadata ?? {}),
+      },
+    },
+  });
+
+  if (execution.ok) {
+    await prisma.recoveryCase.update({
+      where: { id: recoveryCase.id },
+      data: { status: "WAITING_FOR_WEBHOOK", attemptCount: { increment: 1 } },
+    });
+    await writeAudit({
+      recoveryCaseId: recoveryCase.id,
+      eventType: "recovery.link_resent",
+      message: `RakshaPay agent resent payment link${execution.shortUrl ? `: ${execution.shortUrl}` : ""}`,
+      metadata: {
+        source: "assistant",
+        shortUrl: execution.shortUrl,
+        razorpayRefId: execution.razorpayRefId,
+      },
+    });
+  }
+
+  return {
+    ok: execution.ok,
+    caseId: recoveryCase.id,
+    shortUrl: execution.shortUrl ?? null,
+    message: execution.ok
+      ? `${summary}${execution.shortUrl ? ` → ${execution.shortUrl}` : ""}`
+      : execution.message || "Failed to create payment link",
+  };
+}
+
+export async function reassignCase(args: Record<string, unknown>) {
+  const assignedTo = String(args.assignedTo ?? "").trim();
+  const assignedToRole = String(args.assignedToRole ?? "Merchant").trim() || "Merchant";
+  if (!assignedTo) return { error: "assignedTo is required" };
+
+  const recoveryCase = await resolveCase(String(args.caseId ?? ""));
+  if (!recoveryCase) return { error: `Case not found: ${args.caseId}` };
+  if (recoveryCase.status !== "ESCALATED") {
+    return { error: `Case is ${recoveryCase.status}, not ESCALATED` };
+  }
+
+  const summary = `Reassign …${recoveryCase.id.slice(-8)} → ${assignedTo} (${assignedToRole})`;
+  const pending = needsConfirm(
+    "reassign_case",
+    { ...args, caseId: recoveryCase.id, assignedTo, assignedToRole },
+    summary,
+    { from: recoveryCase.assignedTo, to: assignedTo }
+  );
+  if (pending) return pending;
+
+  await prisma.recoveryCase.update({
+    where: { id: recoveryCase.id },
+    data: {
+      assignedTo,
+      assignedToRole,
+      assignedAt: new Date(),
+      assignmentMode: "MANUAL",
+    },
+  });
+  await writeAudit({
+    recoveryCaseId: recoveryCase.id,
+    eventType: "review.reassigned",
+    message: `RakshaPay agent reassigned from ${recoveryCase.assignedTo ?? "unassigned"} to ${assignedTo}`,
+    metadata: { assignedTo, assignedToRole, source: "assistant" },
+  });
+
+  return { ok: true, caseId: recoveryCase.id, assignedTo, message: summary };
+}
+
+export async function unassignCase(args: Record<string, unknown>) {
+  const recoveryCase = await resolveCase(String(args.caseId ?? ""));
+  if (!recoveryCase) return { error: `Case not found: ${args.caseId}` };
+  if (recoveryCase.status !== "ESCALATED") {
+    return { error: `Case is ${recoveryCase.status}, not ESCALATED` };
+  }
+  if (!recoveryCase.assignedTo) {
+    return { ok: true, caseId: recoveryCase.id, message: "Case was already unassigned" };
+  }
+
+  const summary = `Unassign …${recoveryCase.id.slice(-8)} (was ${recoveryCase.assignedTo})`;
+  const pending = needsConfirm(
+    "unassign_case",
+    { ...args, caseId: recoveryCase.id },
+    summary,
+    { was: recoveryCase.assignedTo }
+  );
+  if (pending) return pending;
+
+  await prisma.recoveryCase.update({
+    where: { id: recoveryCase.id },
+    data: {
+      assignedTo: null,
+      assignedToRole: null,
+      assignedAt: null,
+      assignmentMode: null,
+    },
+  });
+  await writeAudit({
+    recoveryCaseId: recoveryCase.id,
+    eventType: "review.unassigned",
+    message: `RakshaPay agent unassigned ${recoveryCase.assignedTo}`,
+    metadata: { source: "assistant" },
+  });
+
+  return { ok: true, caseId: recoveryCase.id, message: summary };
+}
+
+export async function bulkReview(args: Record<string, unknown>) {
+  const action = String(args.action ?? "").toLowerCase();
+  const notes = String(args.notes ?? "").trim();
+  const reviewedBy =
+    String(args.reviewedBy ?? "").trim() ||
+    process.env.MERCHANT_NAME ||
+    "Demo Merchant";
+
+  if (!["approve", "reject"].includes(action)) {
+    return { error: "bulk_review action must be approve or reject" };
+  }
+
+  const queue = await prisma.recoveryCase.findMany({
+    where: {
+      status: "ESCALATED",
+      AND: [{ assignedTo: { not: null } }, { assignedTo: { not: "" } }],
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 25,
+    include: { customer: true },
+  });
+
+  if (!queue.length) {
+    return { ok: true, processed: 0, message: "No assigned escalated cases to bulk review" };
+  }
+
+  const summary = `Bulk ${action.toUpperCase()} ${queue.length} assigned escalated case(s) as ${reviewedBy}`;
+  const pending = needsConfirm(
+    "bulk_review",
+    { ...args, action, notes, reviewedBy },
+    summary,
+    { count: queue.length, caseIds: queue.map((c) => c.id) }
+  );
+  if (pending) return pending;
+
+  const results: { caseId: string; ok: boolean; error?: string }[] = [];
+  for (const c of queue) {
+    const one = await reviewCase({
+      caseId: c.id,
+      action,
+      notes,
+      reviewedBy,
+      confirmed: true,
+    });
+    if (one && typeof one === "object" && (one as { error?: string }).error) {
+      results.push({ caseId: c.id, ok: false, error: String((one as { error: string }).error) });
+    } else {
+      results.push({ caseId: c.id, ok: true });
+    }
+  }
+
+  const okCount = results.filter((r) => r.ok).length;
+  return {
+    ok: okCount > 0,
+    processed: okCount,
+    total: queue.length,
+    results,
+    message: `Bulk ${action}: ${okCount}/${queue.length} succeeded`,
+  };
+}
+
+export function navigateUi(args: Record<string, unknown>) {
+  const tab = String(args.tab ?? "").trim().toLowerCase();
+  const allowed = ["overview", "cases", "review", "audit", "assistant", "evaluation", "settings"];
+  if (!allowed.includes(tab)) {
+    return { error: `tab must be one of: ${allowed.join(", ")}` };
+  }
+  const filter = args.filter != null ? String(args.filter).trim().toUpperCase() : undefined;
+  const caseId = args.caseId != null ? String(args.caseId).trim() : undefined;
+  const assignedOnly =
+    args.assignedOnly === true ||
+    args.assignedOnly === "true" ||
+    filter === "ASSIGNED" ||
+    filter === "MY_ASSIGNED";
+
+  return {
+    ok: true,
+    message: `Opening ${tab}${assignedOnly ? " (my assigned)" : filter ? ` (${filter})` : ""}${caseId ? ` · case …${caseId.slice(-8)}` : ""}`,
+    uiAction: {
+      type: "navigate" as const,
+      tab,
+      filter: assignedOnly ? "ASSIGNED" : filter && filter !== "ASSIGNED" && filter !== "MY_ASSIGNED" ? filter : undefined,
+      assignedOnly: assignedOnly || undefined,
+      caseId: caseId || undefined,
+    },
+  };
+}
+
+export async function exportAudit(args: Record<string, unknown>) {
+  const limit = Math.min(Math.max(Number(args.limit ?? 200) || 200, 1), 500);
+  const caseIdRaw = typeof args.caseId === "string" ? args.caseId.trim() : "";
+  let recoveryCaseId: string | undefined;
+  if (caseIdRaw) {
+    const found = await resolveCase(caseIdRaw);
+    recoveryCaseId = found?.id;
+  }
+
+  const logs = await prisma.auditLog.findMany({
+    where: recoveryCaseId ? { recoveryCaseId } : {},
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+  const events = logs.map((a) => ({
+    id: a.id,
+    recoveryCaseId: a.recoveryCaseId,
+    eventType: a.eventType,
+    message: a.message,
+    createdAt: a.createdAt.toISOString(),
+    metadata: a.metadata,
+  }));
+  const filename = `audit-trail-${new Date().toISOString().slice(0, 10)}.json`;
+
+  return {
+    ok: true,
+    count: events.length,
+    message: `Prepared ${events.length} audit events for download`,
+    uiAction: {
+      type: "export_audit" as const,
+      filename,
+      data: events,
+    },
+  };
+}
+
 export const ASSISTANT_TOOL_DECLARATIONS = [
   {
     name: "get_dashboard_summary",
@@ -886,7 +1253,7 @@ export const ASSISTANT_TOOL_DECLARATIONS = [
   {
     name: "update_policy",
     description:
-      "Update merchant policy guardrails. Pass only fields to change. Requires confirmed=true.",
+      "Update merchant policy guardrails (thresholds, retries, notify SMS/Email). Pass only fields to change. Requires confirmed=true.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -897,6 +1264,109 @@ export const ASSISTANT_TOOL_DECLARATIONS = [
         notifyCustomerSms: { type: "BOOLEAN" },
         notifyCustomerEmail: { type: "BOOLEAN" },
         confirmed: { type: "BOOLEAN" },
+      },
+    },
+  },
+  {
+    name: "list_my_assigned",
+    description: "List escalated cases assigned to the merchant (or given assignedTo name).",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        assignedTo: { type: "STRING" },
+      },
+    },
+  },
+  {
+    name: "simulate_capture",
+    description:
+      "Dev helper: mark a WAITING_FOR_WEBHOOK case as RECOVERED (simulates payment.captured). Requires confirmed=true.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        caseId: { type: "STRING" },
+        confirmed: { type: "BOOLEAN" },
+      },
+      required: ["caseId"],
+    },
+  },
+  {
+    name: "resend_payment_link",
+    description:
+      "Create/resend a Razorpay recovery payment link (SMS/Email per policy) for WAITING_FOR_WEBHOOK or FAILED cases. Requires confirmed=true.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        caseId: { type: "STRING" },
+        confirmed: { type: "BOOLEAN" },
+      },
+      required: ["caseId"],
+    },
+  },
+  {
+    name: "reassign_case",
+    description: "Reassign an ESCALATED case to another reviewer. Requires confirmed=true.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        caseId: { type: "STRING" },
+        assignedTo: { type: "STRING" },
+        assignedToRole: { type: "STRING" },
+        confirmed: { type: "BOOLEAN" },
+      },
+      required: ["caseId", "assignedTo"],
+    },
+  },
+  {
+    name: "unassign_case",
+    description: "Clear reviewer assignment on an ESCALATED case. Requires confirmed=true.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        caseId: { type: "STRING" },
+        confirmed: { type: "BOOLEAN" },
+      },
+      required: ["caseId"],
+    },
+  },
+  {
+    name: "bulk_review",
+    description:
+      "Approve or reject ALL currently assigned escalated cases. Prefer Review page for careful single reviews. Requires confirmed=true.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        action: { type: "STRING", description: "approve | reject" },
+        notes: { type: "STRING" },
+        reviewedBy: { type: "STRING" },
+        confirmed: { type: "BOOLEAN" },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    name: "navigate_ui",
+    description:
+      "Open a dashboard tab for the merchant. tab=overview|cases|review|audit|assistant|evaluation|settings. Optional filter=ESCALATED|RECOVERED|ASSIGNED|WAITING_FOR_WEBHOOK, assignedOnly=true, caseId.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        tab: { type: "STRING" },
+        filter: { type: "STRING" },
+        assignedOnly: { type: "BOOLEAN" },
+        caseId: { type: "STRING" },
+      },
+      required: ["tab"],
+    },
+  },
+  {
+    name: "export_audit",
+    description: "Prepare audit trail JSON for the merchant to download in the UI.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        caseId: { type: "STRING" },
+        limit: { type: "NUMBER" },
       },
     },
   },
@@ -917,6 +1387,8 @@ export async function executeAssistantTool(
       });
     case "list_unassigned_escalated":
       return listUnassignedEscalated();
+    case "list_my_assigned":
+      return listMyAssigned(args);
     case "get_case_detail":
       return getCaseDetail(String(args.caseId ?? ""));
     case "get_policy":
@@ -940,6 +1412,20 @@ export async function executeAssistantTool(
       return runDemo(args);
     case "update_policy":
       return updatePolicy(args);
+    case "simulate_capture":
+      return simulateCapture(args);
+    case "resend_payment_link":
+      return resendPaymentLink(args);
+    case "reassign_case":
+      return reassignCase(args);
+    case "unassign_case":
+      return unassignCase(args);
+    case "bulk_review":
+      return bulkReview(args);
+    case "navigate_ui":
+      return navigateUi(args);
+    case "export_audit":
+      return exportAudit(args);
     default:
       return { error: `Unknown tool: ${name}` };
   }
